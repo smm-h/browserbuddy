@@ -1,8 +1,7 @@
 ---
 title: server/src/index
-description: "API reference for the server/src/index module — auto-generated documentation covering public functions, classes, and type signatures."
+description: "The bin entry point behind the browserbuddy command: it runs the CLI and turns any unhandled failure into a stderr message plus a non-zero exit code."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 6
 ---

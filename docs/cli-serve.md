@@ -17,4 +17,4 @@ Run the MCP stdio server and the WebSocket hub the browser extension connects to
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
 | `--port` |  | int | 8590 |  | WebSocket hub port on 127.0.0.1. Must match WS_URL in extension/background.js. |
-| `--data-dir` |  | str |  |  | Directory for event logs and recorded demonstrations. Defaults to /home/m/Projects/browserbuddy/server/data. |
+| `--data-dir` |  | str |  |  | Directory for event logs and recorded demonstrations. Defaults to server/data inside the installed package. |

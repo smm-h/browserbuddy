@@ -1,8 +1,7 @@
 ---
 title: server/src/hub
-description: "API reference for the server/src/hub module — auto-generated documentation covering public functions, classes, and type signatures."
+description: "Hub is the WebSocket server the extension connects to: it seq-stamps and emits every incoming event, and turns rpc() calls into requests the browser answers."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 5
 ---

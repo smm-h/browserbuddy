@@ -1,8 +1,7 @@
 ---
 title: server/src/cli
-description: "API reference for the server/src/cli module — auto-generated documentation covering public functions, classes, and type signatures."
+description: "createCli defines the browserbuddy serve command; startServer boots the WebSocket hub and the MCP stdio server, keeping stdout reserved for the MCP protocol."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 3
 ---

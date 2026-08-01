@@ -1,8 +1,7 @@
 ---
 title: server/src/store
-description: "API reference for the server/src/store module — auto-generated documentation covering public functions, classes, and type signatures."
+description: "EventStore keeps the last 1000 events in a ring buffer, appends each one to a per-day JSONL log, and lets waitFor block until the next matching event arrives."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 8
 ---

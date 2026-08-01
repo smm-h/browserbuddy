@@ -1,8 +1,7 @@
 ---
 title: extension/background
-description: "API reference for the extension/background module — auto-generated documentation covering public functions, classes, and type signatures."
+description: "The MV3 background context (Chrome service worker, Firefox event page): it owns the hub WebSocket, buffers events while disconnected, and executes or relays every RPC."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 1
 ---

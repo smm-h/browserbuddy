@@ -1,8 +1,7 @@
 ---
 title: extension/content
-description: "API reference for the extension/content module — auto-generated documentation covering public functions, classes, and type signatures."
+description: "The content script in every page: it observes clicks, typing, scrolling and submits, redacts sensitive values at the source, and serves the page-level half of the RPC surface."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 2
 ---

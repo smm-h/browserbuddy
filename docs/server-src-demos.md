@@ -1,8 +1,7 @@
 ---
 title: server/src/demos
-description: "API reference for the server/src/demos module — auto-generated documentation covering public functions, classes, and type signatures."
+description: "DemoRecorder records the user's actions into a named demonstration and saves cleaned, replayable steps as JSON; slugify derives the on-disk file name."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 4
 ---

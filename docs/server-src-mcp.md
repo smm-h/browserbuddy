@@ -1,8 +1,7 @@
 ---
 title: server/src/mcp
-description: "API reference for the server/src/mcp module — auto-generated documentation covering public functions, classes, and type signatures."
+description: "createMcpServer registers all 25 MCP tools: acting tools forwarded to extension RPCs, observation over the event store, lockstep waiting, and demonstration recording."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 7
 ---
