@@ -218,3 +218,7 @@ Accepted trade-offs in version 0.1.0:
 - `docs/`
   - `ARCHITECTURE.md` — components, data flow, and the reasoning behind the design
   - `PROTOCOL.md` — the complete extension/hub wire protocol
+
+## License
+
+Apache-2.0
