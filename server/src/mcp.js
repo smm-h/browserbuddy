@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-const tabId = z.number().describe('Chrome tab id; defaults to the active tab when omitted.');
+const tabId = z.number().describe('Browser tab id; defaults to the active tab when omitted.');
 
 /** browser_state is an orientation call: it must answer fast even when the page is busy. */
 const STATE_LIST_TABS_TIMEOUT_MS = 5000;
@@ -38,13 +38,13 @@ const ACTING_TOOLS = [
     name: 'browser_close_tab',
     method: 'closeTab',
     description: 'Close the browser tab with the given id.',
-    schema: { tabId: z.number().describe('Chrome tab id to close.') }
+    schema: { tabId: z.number().describe('Browser tab id to close.') }
   },
   {
     name: 'browser_focus_tab',
     method: 'activateTab',
     description: 'Bring the given tab to the foreground so the user sees it.',
-    schema: { tabId: z.number().describe('Chrome tab id to activate.') }
+    schema: { tabId: z.number().describe('Browser tab id to activate.') }
   },
   {
     name: 'browser_navigate',

@@ -116,8 +116,9 @@ describe('Hub', () => {
         assert.equal(err.message, notConnectedMessage(port));
         assert.equal(
           err.message,
-          'BrowserBuddy extension is not connected. Make sure Chrome is running with the BrowserBuddy ' +
-            'extension loaded (chrome://extensions → Developer mode → Load unpacked → the extension/ ' +
+          'BrowserBuddy extension is not connected. Make sure Chrome or Firefox is running with the ' +
+            'BrowserBuddy extension loaded (Chrome: chrome://extensions → Developer mode → Load unpacked; ' +
+            'Firefox: about:debugging → This Firefox → Load Temporary Add-on → the extension/ ' +
             `directory). It connects automatically to ws://127.0.0.1:${port}/ws.`
         );
         return true;

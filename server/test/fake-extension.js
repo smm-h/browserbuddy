@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 
 /**
- * Stand-in for the Chrome extension: speaks the hub protocol over a real
+ * Stand-in for the browser extension: speaks the hub protocol over a real
  * WebSocket so tests exercise the wire format rather than internals.
  */
 export class FakeExtension {

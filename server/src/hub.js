@@ -6,14 +6,15 @@ const DEFAULT_RPC_TIMEOUT_MS = 20000;
 
 export function notConnectedMessage(port) {
   return (
-    'BrowserBuddy extension is not connected. Make sure Chrome is running with the BrowserBuddy ' +
-    'extension loaded (chrome://extensions → Developer mode → Load unpacked → the extension/ ' +
+    'BrowserBuddy extension is not connected. Make sure Chrome or Firefox is running with the ' +
+    'BrowserBuddy extension loaded (Chrome: chrome://extensions → Developer mode → Load unpacked; ' +
+    'Firefox: about:debugging → This Firefox → Load Temporary Add-on → the extension/ ' +
     `directory). It connects automatically to ws://127.0.0.1:${port}/ws.`
   );
 }
 
 /**
- * WebSocket hub the Chrome extension connects to. Emits "event" for every
+ * WebSocket hub the browser extension connects to. Emits "event" for every
  * seq-stamped incoming event and exposes rpc() for calls into the browser.
  */
 export class Hub extends EventEmitter {
