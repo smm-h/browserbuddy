@@ -1,5 +1,6 @@
 {
   "name": "browserbuddy",
+  "version": "0.1.0",
   "description": "A shared browser for you and your coding agent: an MCP server plus a WebExtension that let an agent see and drive the same browser window you are already using.",
   "source": [
     {
