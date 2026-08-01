@@ -219,3 +219,7 @@ Accepted trade-offs in version :-: var key="project.version":
 - `docs/`
   - `ARCHITECTURE.md` — components, data flow, and the reasoning behind the design
   - `PROTOCOL.md` — the complete extension/hub wire protocol
+
+## License
+
+Apache-2.0
