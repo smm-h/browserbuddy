@@ -20,13 +20,19 @@ describe('CLI', () => {
     assert.equal(r.stderr, '');
   });
 
-  test('serve --help documents both flags and the data-dir default', async () => {
+  test('serve --help documents both flags without leaking an absolute path', async () => {
     const r = await createCli().test(['serve', '--help']);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /--port/);
     assert.match(r.stdout, /default: 8590/);
     assert.match(r.stdout, /--data-dir/);
-    assert.ok(r.stdout.includes(DEFAULT_DATA_DIR), 'serve --help names the default data dir');
+    assert.match(r.stdout, /server\/data/);
+    // The help string is baked into .strictcli/schema.json and the generated
+    // docs, so it must never interpolate the machine-specific resolved path.
+    assert.ok(
+      !r.stdout.includes(DEFAULT_DATA_DIR),
+      'serve --help must not embed the absolute default data dir'
+    );
   });
 
   test('the default data dir is server/data', () => {

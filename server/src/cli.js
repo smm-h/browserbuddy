@@ -76,7 +76,7 @@ export function createCli() {
           default: 8590n
         }),
         data_dir: flag('data-dir', t.str, {
-          help: `Directory for event logs and recorded demonstrations. Defaults to ${DEFAULT_DATA_DIR}.`,
+          help: 'Directory for event logs and recorded demonstrations. Defaults to server/data inside the installed package.',
           default: null
         })
       },

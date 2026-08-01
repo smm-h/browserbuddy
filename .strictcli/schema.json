@@ -64,7 +64,7 @@
         {
           "name": "data-dir",
           "type": "str",
-          "help": "Directory for event logs and recorded demonstrations. Defaults to /home/m/Projects/browserbuddy/server/data."
+          "help": "Directory for event logs and recorded demonstrations. Defaults to server/data inside the installed package."
         }
       ]
     }
