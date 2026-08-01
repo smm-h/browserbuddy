@@ -6,6 +6,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = []
+keywords = ["rlsbl"]
 
 [project.urls]
 Homepage = "https://github.com/smm-h/browserbuddy"
