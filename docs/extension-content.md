@@ -1,6 +1,6 @@
 ---
 title: extension/content
-description: "The content script in every page: it observes clicks, typing, scrolling and submits, redacts sensitive values at the source, and serves the page-level half of the RPC surface."
+description: "The content script in every page: observes clicks, typing, scrolling and submits, redacts sensitive values at the source, and serves the page-level RPCs."
 generated: true
 nav_group: "API Reference"
 nav_order: 2

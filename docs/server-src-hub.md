@@ -1,6 +1,6 @@
 ---
 title: server/src/hub
-description: "Hub is the WebSocket server the extension connects to: it seq-stamps and emits every incoming event, and turns rpc() calls into requests the browser answers."
+description: "Hub is the WebSocket server the extension connects to: it seq-stamps and emits incoming events, and turns rpc() calls into requests the browser answers."
 generated: true
 nav_group: "API Reference"
 nav_order: 5

@@ -1,8 +1,7 @@
 ---
 title: API Reference
-description: "API reference index for browserbuddy covering 8 modules"
+description: "API reference for every BrowserBuddy module: the Node server (CLI, hub, event store, demo recorder, MCP tools) and the two extension scripts."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 0
 order: 90

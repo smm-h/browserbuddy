@@ -1,6 +1,6 @@
 ---
 title: server/src/store
-description: "EventStore keeps the last 1000 events in a ring buffer, appends each one to a per-day JSONL log, and lets waitFor block until the next matching event arrives."
+description: "EventStore keeps the last 1000 events in a ring buffer, appends each to a per-day JSONL log, and lets waitFor block until the next matching event arrives."
 generated: true
 nav_group: "API Reference"
 nav_order: 8

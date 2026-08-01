@@ -1,6 +1,6 @@
 ---
 title: server/src/mcp
-description: "createMcpServer registers all 25 MCP tools: acting tools forwarded to extension RPCs, observation over the event store, lockstep waiting, and demonstration recording."
+description: "createMcpServer registers all 25 MCP tools: acting tools forwarded to extension RPCs, observation over the event store, lockstep waiting, demo recording."
 generated: true
 nav_group: "API Reference"
 nav_order: 7

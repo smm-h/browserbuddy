@@ -1,6 +1,6 @@
 ---
 title: extension/background
-description: "The MV3 background context (Chrome service worker, Firefox event page): it owns the hub WebSocket, buffers events while disconnected, and executes or relays every RPC."
+description: "The MV3 background context (Chrome service worker, Firefox event page): owns the hub WebSocket, buffers events while disconnected, executes or relays RPCs."
 generated: true
 nav_group: "API Reference"
 nav_order: 1

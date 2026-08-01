@@ -1,8 +1,7 @@
 ---
 title: browserbuddy serve
-description: "Run the MCP stdio server and the WebSocket hub the browser extension connects to."
+description: "Run the MCP stdio server and the WebSocket hub the browser extension connects to, with flags for the hub port and the event/demo data directory."
 generated: true
-seeded: true
 nav_group: "CLI Reference"
 nav_order: 1
 ---

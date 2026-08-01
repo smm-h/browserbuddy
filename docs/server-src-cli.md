@@ -1,6 +1,6 @@
 ---
 title: server/src/cli
-description: "createCli defines the browserbuddy serve command; startServer boots the WebSocket hub and the MCP stdio server, keeping stdout reserved for the MCP protocol."
+description: "createCli defines the browserbuddy serve command; startServer boots the WebSocket hub and the MCP stdio server, keeping stdout reserved for MCP itself."
 generated: true
 nav_group: "API Reference"
 nav_order: 3

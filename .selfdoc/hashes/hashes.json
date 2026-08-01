@@ -1,11 +1,11 @@
 {
   "ARCHITECTURE.md": {
     "content": "83b7aff77609e8aaf39a93ba1adebe95eac135848f0fb98fa2534d2c45db6e38",
-    "description": "d89c6f0bce8925258bb61cfd7c7a5dbd72dfbef9f99b8b10931d4765f285d41d"
+    "description": "7043e4958968f4816e8da9affb4b15e47523bbdfd43fbb24197e7df6926ce6f9"
   },
   "PROTOCOL.md": {
     "content": "8f388d5fb2c036fe19e00b668b24da3f316134029c36c2df2484ee05dd2f981f",
-    "description": "26f9f1e82232b2466ceb50a13e0765c6d296dc81d7b869c9b6d6cdda5412e4bf"
+    "description": "c2364163b990eb03f7250a14b0701999fd2d9f17387c696011d1623823bae4d2"
   },
   "_hash_version": 3,
   "cli-index.md": {
@@ -15,22 +15,20 @@
   },
   "cli-serve.md": {
     "content": "064282ec562c74c8f83ff58e073be2d5a3144feabfae7b7647354c1588a2b703",
-    "description": "629b6b70c69349046f04c7251121b7f753eee00321fb9a8dc4886589cde0fcce",
-    "schema_hash": "e5ab8b053cd3b32f5b3a0741a348f03b3eaeed26911588997f93bb4ba79fcd20",
-    "seed_hash": "629b6b70c69349046f04c7251121b7f753eee00321fb9a8dc4886589cde0fcce"
+    "description": "a33a731768d3d98d16233725505b8b69c1a22df8984d4eb499ce3e6b0d5abd1d",
+    "schema_hash": "e5ab8b053cd3b32f5b3a0741a348f03b3eaeed26911588997f93bb4ba79fcd20"
   },
   "extension-background.md": {
     "content": "f726f53888beeea2987af7b86706558d5d7e6e32a91f427de802743b2a72e754",
-    "description": "8ea4c59d5904457509529e24068d8a8b106b3fc7eab94610e4d435ea0da8271b"
+    "description": "82f98ca00df41cd1f833e2c2c4fe8ffa0c983e06430f260073ca6abf7978705b"
   },
   "extension-content.md": {
     "content": "fe2885f04af6cc471759b7cf51ae84803d4060528d26321a545ab266da0f9931",
-    "description": "2c20367d9610cde0122e44f67af73fb8560d163de2c7dd1d198943af32d467e2"
+    "description": "6c72fdb22b22f716e3a314d91242696f9ce63e4c01dea5471089258fbd262931"
   },
   "gen-index.md": {
     "content": "66bb6508fb6eb748657ae78b732c54a08c93619c1f6a018028913088cd38180f",
-    "description": "7078682f346e76cb2f677c1fa6a31541cc588eec18d59554691c6fe2284ae648",
-    "seed_hash": "7078682f346e76cb2f677c1fa6a31541cc588eec18d59554691c6fe2284ae648"
+    "description": "88e31fae9611fddff2daee5bb158d9577b910361cfd64f1970166fd8fbfe25e1"
   },
   "index.md": {
     "content": "3afe22ae5ca219b524bd131844f7ca1e5c93424e4af6a5be9ab59c6943e7bde7",
@@ -38,7 +36,7 @@
   },
   "server-src-cli.md": {
     "content": "8e7942a0e5741942d57be929538bd841c6fa6ec873fa4ce0f1fc463c4ffcfd6a",
-    "description": "ec12640158b55368654b93f4e9520a3d1e5f77412cc295d9683f5dffb1b67bad"
+    "description": "0d6fe878e587a94bdce2ef4fa1e95c7e6e6b9524f5e861b250e72ff6227f98d8"
   },
   "server-src-demos.md": {
     "content": "5a9c4d9fee9acab464f72af6947feacb213dd1958a634fddf4762c568cdfa1ba",
@@ -46,7 +44,7 @@
   },
   "server-src-hub.md": {
     "content": "97aa7922c1e392500406b74c75ca605d4ff7676ca1af43c6297a373574588e4a",
-    "description": "ef540ba5cbb285a3efbf628b64682be5ae4c9bc7beb195dc294b1fd20077db69"
+    "description": "7e7dc56e30342c7998c5de4e13c68e500acffa96797db75badd32503dbc40b94"
   },
   "server-src-index.md": {
     "content": "9e2c003235b5153633d2f1e5eb43bec00cd91875e25f7941c7313ac667d560a3",
@@ -54,10 +52,10 @@
   },
   "server-src-mcp.md": {
     "content": "8d54f360346a4d0232a35a253ab52c0a21ed3e35a7f1b0d959d6dfc18b43816d",
-    "description": "bc74d92aa7413749d8c7c6bf7519bcf53b0b5c3e07d478d846bcf874793aecf2"
+    "description": "d26303496b5e8b010996da4fc5c8774dbc2fc6a3b8a587dafe5261ff1984a4be"
   },
   "server-src-store.md": {
     "content": "4b5495a47cf51283c84ff53948e8a6c574666532b98ddd27dc91e34ced93c72d",
-    "description": "42478fed2b08605c4de8de46f6a4a08a461a55eb9b997a70db72723da0b536a5"
+    "description": "4aad6e2a53204e6d5f4c3bac4499acfb0fd6ddc0715f5a383d3708d3653e814b"
   }
 }
