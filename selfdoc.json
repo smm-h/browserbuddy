@@ -1,0 +1,22 @@
+{
+  "name": "browserbuddy",
+  "description": "A shared browser for you and your coding agent: an MCP server plus a WebExtension that let an agent see and drive the same browser window you are already using.",
+  "source": [
+    {
+      "path": "server/src/",
+      "language": "typescript"
+    },
+    {
+      "path": "extension/",
+      "language": "typescript"
+    }
+  ],
+  "docs": "docs/",
+  "output": "docs/_build/",
+  "base_url": "https://github.com/smm-h/browserbuddy",
+  "repo": "https://github.com/smm-h/browserbuddy",
+  "root_files": [
+    "docs/_README.md",
+    "docs/_CLAUDE.md"
+  ]
+}

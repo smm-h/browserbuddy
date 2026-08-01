@@ -1,4 +1,11 @@
+---
+title: README.md
+description: "BrowserBuddy README template -- shared-browser pitch, setup for Chrome and Firefox, the MCP tool catalog, ways of working, privacy, and limitations."
+---
+
 # BrowserBuddy
+
+> **:-: var key="project.name"** :-: var key="project.version" — an MCP stdio server plus a cross-browser WebExtension. Requires Node.js 22 or newer.
 
 ## What it is
 
@@ -57,10 +64,14 @@ Node.js 22 or newer is required.
 ### 3. Register the MCP server with Claude Code
 
 ```
-claude mcp add browserbuddy -- node /home/m/Projects/browserbuddy/server/src/index.js serve
+claude mcp add browserbuddy -- node /absolute/path/to/browserbuddy/server/src/index.js serve
 ```
 
-The `serve` command accepts two flags:
+The CLI is a single command:
+
+:-: table-commands
+
+`serve` accepts two flags:
 
 | Flag | Default | Purpose |
 | --- | --- | --- |
@@ -144,7 +155,12 @@ Turn-taking on one task. The assistant fills the parts of a form it knows, then 
 
 ## Privacy and data
 
-**Redaction happens at the source, inside the page, before anything is sent.** A field's value is replaced with `[REDACTED]` when any of the following hold:
+:<: callout-important
+:=:
+::: Redaction happens at the source, inside the page, before anything is sent. A sensitive value never reaches the hub, never reaches the disk, and is never visible to the assistant.
+:>:
+
+A field's value is replaced with `[REDACTED]` when any of the following hold:
 
 - the input's `type` is `password`;
 - its `autocomplete` attribute starts with `cc-` (credit card fields);
@@ -172,16 +188,20 @@ Copy and paste events from ordinary page content keep only a preview of at most 
 
 ## Limitations
 
-Accepted trade-offs in v0.1.0:
+Accepted trade-offs in version :-: var key="project.version":
 
 - **Synthetic clicks are `isTrusted: false`.** Extension-generated events are distinguishable from human ones. Most sites do not care; a few hardened ones (some payment and anti-fraud flows) ignore them. Those steps need you — which is what lockstep is for.
 - **`browser_eval` is subject to page CSP.** A strict Content-Security-Policy can block main-world evaluation. This is reported as a hard error, not silently worked around.
 - **Screenshots capture the visible tab only.** The browser can only capture what is on screen, so `browser_screenshot` activates the target tab first. Expect your foreground tab to change.
-- **Screenshots on Firefox need a gesture.** Firefox MV3 never treats granted host permissions as capture permission, so `browser_screenshot` fails with a hard error explaining the one supported path: click the BrowserBuddy toolbar button on the tab (this grants `activeTab`), then retry. The grant lasts until the tab navigates. On Chrome no gesture is needed.
 - **No browser-internal pages.** Content scripts cannot run on `chrome://` or `about:` pages, the Chrome Web Store, addons.mozilla.org, or other extensions' pages, so nothing there can be observed or acted on.
 - **Firefox suspends the background at idle.** Firefox does not count WebSocket traffic as background activity, so at idle it suspends the extension's event page and the 30-second alarm revives it — roughly one reconnect per minute, during which acting tools fail with the not-connected error (retry succeeds within ~30 s) and observed events are buffered, not lost. Chrome keeps the socket's service worker alive continuously.
 - **One browser profile at a time.** The hub accepts a single extension connection; a new `hello` closes the previous one. This also means Chrome and Firefox cannot be connected simultaneously.
 - **Port 8590 must be free.** The server exits rather than falling back to another port.
+
+:<: callout-warning
+:=:
+::: Screenshots on Firefox need a gesture. Firefox MV3 never treats granted host permissions as capture permission, so <code>browser_screenshot</code> fails with a hard error explaining the one supported path: click the BrowserBuddy toolbar button on the tab (this grants <code>activeTab</code>), then retry. The grant lasts until the tab navigates. On Chrome no gesture is needed.
+:>:
 
 ## Layout
 
