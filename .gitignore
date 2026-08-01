@@ -7,6 +7,11 @@ server/data/
 # Test scratch space (unit-test temp dirs, e2e Chrome profile)
 server/test/.tmp/
 
+# PyPI name-reservation package build artifacts
+pypi/dist/
+pypi/.venv/
+__pycache__/
+
 # Logs and OS cruft
 *.log
 .DS_Store
