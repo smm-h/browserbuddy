@@ -181,11 +181,11 @@ function useDataUrls() {
 }
 
 // ---------------------------------------------------------------------------
-// MCP client (SDK is installed under server/node_modules)
+// MCP client (SDK is installed under the repo-root node_modules)
 // ---------------------------------------------------------------------------
 
 async function loadSdk() {
-  const req = createRequire(path.join(ROOT, 'server', 'package.json'));
+  const req = createRequire(path.join(ROOT, 'package.json'));
   // The package is dual-published; resolve() lands on dist/cjs, so derive the
   // package root and load the ESM build explicitly.
   const cjsEntry = req.resolve('@modelcontextprotocol/sdk/client/index.js');

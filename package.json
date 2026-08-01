@@ -1,0 +1,32 @@
+{
+  "name": "browserbuddy",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A shared browser for you and your coding agent: an MCP server plus a WebExtension that let an agent see and drive the same browser window you are already using.",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "browserbuddy": "./server/src/index.js"
+  },
+  "scripts": {
+    "start": "node server/src/index.js serve",
+    "test": "node --test server/test/*.test.js"
+  },
+  "files": [
+    "server/src/",
+    "extension/",
+    "docs/PROTOCOL.md",
+    "docs/ARCHITECTURE.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smm-h/browserbuddy.git"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "strictcli": "latest",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  }
+}
