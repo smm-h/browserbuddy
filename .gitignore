@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# BrowserBuddy runtime data (event logs, recorded demos)
+server/data/
+
+# Test scratch space (unit-test temp dirs, e2e Chrome profile)
+server/test/.tmp/
+
+# Logs and OS cruft
+*.log
+.DS_Store
+
+# Claude Code local session settings
+.claude/settings.local.json

@@ -1,0 +1,20 @@
+{
+  "name": "browserbuddy-server",
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "browserbuddy-server": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  }
+}

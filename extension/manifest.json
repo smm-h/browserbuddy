@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "BrowserBuddy",
+  "version": "0.1.0",
+  "description": "Streams your browsing activity to the local BrowserBuddy MCP server and lets the paired AI assistant act in your browser.",
+  "permissions": [
+    "tabs",
+    "webNavigation",
+    "downloads",
+    "scripting",
+    "storage",
+    "activeTab",
+    "clipboardWrite",
+    "alarms"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_title": "BrowserBuddy"
+  }
+}
