@@ -1,10 +1,10 @@
 # BrowserBuddy wire protocol (v0.1.0)
 
-This document specifies the complete protocol between the Chrome extension and the local hub. It is intended to be sufficient to reimplement either side without reading the other's source.
+This document specifies the complete protocol between the browser extension and the local hub. It is intended to be sufficient to reimplement either side without reading the other's source. The protocol is browser-agnostic: the same extension code speaks it from Chrome and from Firefox, and the hub cannot tell them apart.
 
 Two roles:
 
-- **Extension** — the WebSocket client. Runs in Chrome; observes the browser and executes commands.
+- **Extension** — the WebSocket client. Runs in Chrome or Firefox; observes the browser and executes commands.
 - **Hub** — the WebSocket server, embedded in the same Node.js process that serves MCP over stdio. Stores events and issues commands.
 
 ## 1. Transport
@@ -15,7 +15,7 @@ Two roles:
 - Every WebSocket message is a single, complete, UTF-8 JSON **object**. No batching, no arrays at the top level, no fragmented application framing. One message, one object.
 - Every object has a `kind` field (string) identifying the message type. Messages with an unknown `kind` are ignored by the receiver; they are not an error.
 - The extension is always the connecting party. The hub never initiates a connection.
-- If the hub is not listening, the extension retries on a fixed reconnect ladder of 1 s, 2 s, 5 s, 10 s, staying at 10 s thereafter (it is not exponential), backed by a 30-second `chrome.alarms` timer that retries the connection even if the retry timer was lost to a service-worker teardown. Connection ordering between Chrome and the server is not significant.
+- If the hub is not listening, the extension retries on a fixed reconnect ladder of 1 s, 2 s, 5 s, 10 s, staying at 10 s thereafter (it is not exponential), backed by a 30-second `alarms` timer that retries the connection even if the retry timer was lost to a background teardown. Connection ordering between the browser and the server is not significant.
 
 ### Message kinds
 
@@ -57,7 +57,7 @@ The hub replies:
 Rules:
 
 - **Hello gating is enforced.** Only the socket that most recently completed `hello` may send other frames. Any frame whose `kind` is not `hello`, arriving on a socket that is not the currently adopted one, is logged to stderr and dropped — it cannot inject an event or settle somebody else's RPC. This applies both to a socket that never said hello and to a socket that was displaced by a newer connection.
-- **At most one extension connection is live at a time.** When a `hello` arrives on a new socket while another extension connection is established, the hub closes the older socket and adopts the new one. This is the defined behaviour, not a race: the newest connection always wins. It makes extension reloads (which produce a new service worker and a new socket) resolve deterministically.
+- **At most one extension connection is live at a time.** When a `hello` arrives on a new socket while another extension connection is established, the hub closes the older socket and adopts the new one. This is the defined behaviour, not a race: the newest connection always wins. It makes extension reloads (which produce a new background context and a new socket) resolve deterministically.
 - Version fields are informational in v0.1.0. Neither side refuses a connection on version mismatch.
 - On connection loss the extension reconnects on the fixed ladder of §1 and repeats the handshake. Nothing is negotiated or resumed; a reconnect is a fresh session.
 
@@ -75,7 +75,7 @@ The hub replies immediately:
 {"kind":"pong"}
 ```
 
-The interval exists to keep the MV3 service worker's WebSocket activity alive: the outbound message defers the idle shutdown that would otherwise tear down the connection roughly every 30 seconds. The 20-second interval is chosen to sit safely inside that window.
+The interval exists to keep the MV3 background context's WebSocket activity alive: on Chrome, the outbound message defers the service worker's idle shutdown that would otherwise tear down the connection roughly every 30 seconds, and the 20-second interval is chosen to sit safely inside that window. Firefox does not count WebSocket traffic as background activity, so there the ping does not prevent the event page's idle suspension — the extension instead reconnects when its 30-second alarm revives the page (roughly once a minute at idle), which the newest-wins handshake rule of §2 resolves cleanly.
 
 The extension does **not** act on `pong`. It parses the frame and ignores it; there is no missed-pong counter and no pong-driven reconnect. Liveness is detected only through the socket closing, which schedules the reconnect ladder of §1. A hub that stops replying while the socket stays open is therefore not detected by the keepalive.
 
@@ -96,7 +96,7 @@ Fields of the inner `event` object as sent by the extension:
 | `ts` | integer | yes | Epoch milliseconds at which the extension observed the event. |
 | `actor` | string | yes | `"user"` or `"agent"`. See §6. |
 | `type` | string | yes | One of the event types in §4.3. |
-| `tabId` | integer \| null | yes | Chrome tab id. `null` for window-level events with no associated tab. |
+| `tabId` | integer \| null | yes | Browser tab id. `null` for window-level events with no associated tab. |
 | `url` | string \| null | yes | URL of the tab at the time of the event. `null` when unknown or not applicable. |
 | `data` | object | yes | Type-specific payload. May be empty (`{}`) but must be present. |
 
@@ -134,7 +134,7 @@ Events are never acknowledged. The hub sends nothing in response to an `event` m
 | `tab_created` | — (`{}`) | background (`tabs.onCreated`) | A new tab was opened. `url` is the tab's `pendingUrl`, falling back to `url`, else `null`. |
 | `tab_closed` | — (`{}`) | background (`tabs.onRemoved`) | A tab was closed. `url` is always `null`: `onRemoved` carries no URL and the tab is already gone. |
 | `tab_activated` | `title` (string \| null) | background (`tabs.onActivated`) | The foreground tab changed. If the tab cannot be fetched, `url` and `title` are `null`. |
-| `navigation` | `transitionType` (string \| null) | background (`webNavigation.onCommitted`) | A main-frame navigation committed. Sub-frame navigations are not reported. `transitionType` is Chrome's value: `link`, `typed`, `reload`, `form_submit`, `auto_bookmark`, and so on. |
+| `navigation` | `transitionType` (string \| null) | background (`webNavigation.onCommitted`) | A main-frame navigation committed. Sub-frame navigations are not reported. `transitionType` is the browser's own value (`link`, `typed`, `reload`, `form_submit`, `auto_bookmark`, and so on; the exact vocabulary differs slightly between Chrome and Firefox). |
 | `page_loaded` | `title` (string \| null) | background (`webNavigation.onCompleted`) | The main frame finished loading. This is a browser-level event, not a content-script one: it is emitted even for pages where no content script runs. |
 | `click` | `selector` (string), `text` (string), `tag` (string), `href` (string, optional) | content script | `text` is the element's trimmed visible text, capped at 80 characters; when the element has no text it falls back to its `aria-label`, and then to its `value` — except that a sensitive element (§5) reports `"[REDACTED]"` instead of its value. `tag` is lowercase. `href` present only for anchors with an `href`. |
 | `input` | `selector` (string), `name` (string, optional), `inputType` (string), `label` (string, optional), `value` (string), `redacted` (boolean) | content script | Debounced; see §4.4. `inputType` is the field's lowercased `type` attribute; a `<input>` with no `type` reports `"text"`, and a `<textarea>`/`<select>`/contenteditable reports its tag name. `label` is the resolved human label if one could be found. `value` is `"[REDACTED]"` when `redacted` is true. `redacted` is always present. |
@@ -143,7 +143,7 @@ Events are never acknowledged. The hub sends nothing in response to an `event` m
 | `scroll` | `y` (number), `maxY` (number), `pct` (number) | content script | Debounced; see §4.4. Only the document's own scroll is reported — scrolling of an inner container is ignored. `y` is scroll offset in pixels, `maxY` the maximum scrollable offset, `pct` the position as a percentage (0–100, and 0 when the page does not scroll). |
 | `copy` | `textPreview` (string) | content script | At most 200 characters of the copied text, never the full contents — and `"[REDACTED]"` when the copy event's target or the focused element is a sensitive field (§5). |
 | `paste` | `textPreview` (string) | content script | At most 200 characters of the pasted text, and `"[REDACTED]"` when the paste target is a sensitive field (§5). |
-| `download_started` | `filename` (string \| null) | background (`downloads.onCreated`) | A download began. `filename` is the basename of Chrome's suggested path. `tabId` is always `null`; `url` is the download URL. |
+| `download_started` | `filename` (string \| null) | background (`downloads.onCreated`) | A download began. `filename` is the basename of the browser's suggested path. `tabId` is always `null`; `url` is the download URL. |
 | `window_focus` | `focused` (boolean) | background (`windows.onFocusChanged`) | The browser window gained (`true`) or lost (`false`) focus. `tabId` and `url` are always `null`. `actor` is `"user"` unless the focus change falls inside the agent focus window opened by `activateTab` (see §6). |
 
 Events originating in a content script are sent with `tabId: null` and the page's `location.href`; the background script overwrites `tabId` from the message sender (and fills `url` from the sender tab if it was empty) before forwarding them to the hub.
@@ -157,15 +157,15 @@ Two event types are coalesced in the content script to avoid flooding the hub wi
 
 No other event type is debounced. Clicks, submits, navigations and the rest are emitted as they happen.
 
-### 4.5 Event buffering across service-worker restarts
+### 4.5 Event buffering across background restarts
 
-The MV3 service worker can be terminated at any time. Events observed while the socket is down are buffered in the extension and mirrored to `chrome.storage.session`, so a worker restart does not lose them. On reconnect the buffer is drained in original order. `ts` therefore reflects observation time, while `seq` and `receivedAt` reflect the (possibly much later) delivery — another reason `seq` orders by arrival and not by `ts`.
+The MV3 background context (a service worker on Chrome, an event page on Firefox) can be terminated at any time. Events observed while the socket is down are buffered in the extension and mirrored to `storage.session`, so a background restart does not lose them. On reconnect the buffer is drained in original order. `ts` therefore reflects observation time, while `seq` and `receivedAt` reflect the (possibly much later) delivery — another reason `seq` orders by arrival and not by `ts`.
 
 Details of the buffer:
 
 - **Capacity 500, drop-oldest.** Once 500 events are queued, each new event evicts the oldest. A long disconnection loses the beginning of the gap, not the end.
 - **Ordering is preserved on drain.** While anything is buffered, even a live event is appended to the queue rather than sent directly, so nothing overtakes the backlog.
-- **Mirror writes are coalesced** into a single `chrome.storage.session` write 500 ms after the last change, **except** immediately after a complete flush, which writes through at once. Without that write-through, a worker teardown inside the coalescing window would restore a mirror still holding the just-sent events and deliver them twice.
+- **Mirror writes are coalesced** into a single `storage.session` write 500 ms after the last change, **except** immediately after a complete flush, which writes through at once. Without that write-through, a worker teardown inside the coalescing window would restore a mirror still holding the just-sent events and deliver them twice.
 - **Rehydration is additive.** On worker start the mirrored array is prepended to whatever is already in memory and the result is truncated to the newest 500 entries, then the socket is connected.
 
 ## 5. Redaction
@@ -218,7 +218,7 @@ Attribution is applied in two layers, because the two layers see different effec
 
 Two consequences worth knowing:
 
-- `runJs` executes in the page's main world from the background via `chrome.scripting`, not through the content script, so it cannot set the in-page flag itself. Instead the background sends the target tab's content script an internal `agentWindow` message immediately before injecting, which raises an in-page agent window of **1500 ms**; DOM events the injected code causes inside that window are attributed `agent`. The window and the 100 ms RPC flag coexist — whichever deadline is later wins. A tab with no content script (`chrome://`, the Web Store) cannot receive the message; that failure is ignored and `runJs` proceeds. Its tab-level effects are `agent` regardless, because the background marks the tab.
+- `runJs` executes in the page's main world from the background via the `scripting` API, not through the content script, so it cannot set the in-page flag itself. Instead the background sends the target tab's content script an internal `agentWindow` message immediately before injecting, which raises an in-page agent window of **1500 ms**; DOM events the injected code causes inside that window are attributed `agent`. The window and the 100 ms RPC flag coexist — whichever deadline is later wins. A tab with no content script (browser-internal pages, extension stores) cannot receive the message; that failure is ignored and `runJs` proceeds. Its tab-level effects are `agent` regardless, because the background marks the tab.
 - `readPage`, `getPageState` and `setClipboard` do not set the flag either; they produce no DOM events.
 
 Observation tools default to `actor: "user"`: `browser_observe` filters to user events unless asked otherwise, and `browser_wait_for_user` only ever wakes on `actor:"user"` events. Agent events are still recorded in full and can be requested explicitly, which makes the log a complete audit of both parties.
@@ -317,10 +317,10 @@ Result objects are exactly as listed. Several methods deliberately return an emp
 
 Notes:
 
-- `listTabs` queries **all** windows and reports every tab. `url` and `title` are `null` when Chrome does not expose them. There is no `index` field.
+- `listTabs` queries **all** windows and reports every tab. `url` and `title` are `null` when the browser does not expose them. There is no `index` field.
 - `newTab` returns only the new tab's id; it does not echo the URL. Omitting `url` opens a blank tab.
 - `activateTab` both activates the tab and focuses its window.
-- `screenshot`: Chrome can only capture the **visible** tab, so if the target is not the active tab the extension activates it, waits 350 ms, and leaves it active. The image is JPEG at quality 70, returned base64-encoded in the **`base64`** field without the `data:image/jpeg;base64,` prefix. There is no `tabId` in the result. An unexpected data-URL format from Chrome is an error, not a silently passed-through string.
+- `screenshot`: the browser can only capture the **visible** tab, so if the target is not the active tab the extension activates it, waits 350 ms, and leaves it active. The image is JPEG at quality 70, returned base64-encoded in the **`base64`** field without the `data:image/jpeg;base64,` prefix. There is no `tabId` in the result. An unexpected data-URL format from the browser is an error, not a silently passed-through string. On Firefox, capture without a user gesture is impossible in MV3 (granted host permissions are never treated as the capture permission), so the call fails with `ok:false` and an error explaining the one supported path: the user clicks the extension's toolbar button on the tab, which grants `activeTab` until the tab navigates, after which `screenshot` succeeds. There is no silent alternative capture path.
 - `download` runs through the browser's own downloader, so it carries the user's cookies and session — which is the point of downloading through the extension rather than fetching the URL server-side.
 - `runJs` returns `{result: <value>}`, with `null` substituted when the evaluated code produced `undefined`. Despite being a page-level operation it is handled by the background script, not the content script: see below.
 
@@ -356,9 +356,9 @@ Notes:
 
 For `input` and `textarea` targets, `fill` sets the value through the **native value setter** on the element's prototype and then dispatches `input` and `change` events. This is required for React and other frameworks that track values on the property descriptor and ignore direct assignment; without it, a filled field looks filled but the framework's state never updates. A `<select>` is matched by option value first and then by option text, and dispatches `input` and `change`; a contenteditable element has its `textContent` replaced and dispatches `input` only. Any other element is an error naming the tag that was found.
 
-`runJs` evaluates `code` in the page's **main world** (not the isolated content-script world), so it sees the page's own globals. It is injected by the background script through `chrome.scripting.executeScript` into frame 0 of the target tab — it does not travel through the content script, and therefore does not need one. A strict page Content-Security-Policy can block it. When it does, the call fails with `ok:false` and an explanatory error that names CSP as the likely cause. There is no alternative injection strategy and no fallback — one operation, one mechanism.
+`runJs` evaluates `code` in the page's **main world** (not the isolated content-script world), so it sees the page's own globals. It is injected by the background script through `scripting.executeScript` with `world: "MAIN"` into frame 0 of the target tab — it does not travel through the content script, and therefore does not need one. Main-world injection is why the manifest pins Firefox to 128 or newer (`strict_min_version`); Chrome has supported it far longer. A strict page Content-Security-Policy can block it. When it does, the call fails with `ok:false` and an explanatory error that names CSP as the likely cause. There is no alternative injection strategy and no fallback — one operation, one mechanism.
 
-The six page-interaction methods above require a content script in the target tab. On `chrome://` pages, the Web Store, and other extensions' pages, Chrome does not permit content scripts, so these calls fail with an error that names the tab and explains why it is unreachable.
+The six page-interaction methods above require a content script in the target tab. On browser-internal pages (`chrome://`, `about:`), the Chrome Web Store, addons.mozilla.org, and other extensions' pages, the browser does not permit content scripts, so these calls fail with an error that names the tab and explains why it is unreachable. On Firefox they additionally require the host permission to be granted (MV3 host permissions are opt-in there; see the README setup instructions).
 
 ## 9. Summary of invariants
 

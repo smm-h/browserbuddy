@@ -2,7 +2,7 @@
 
 ## What it is
 
-BrowserBuddy turns your real Chrome browser into a space you share with an AI assistant. The assistant is not driving a separate throwaway browser somewhere off to the side — it is in the same window you are, with your logins, your tabs, and your session. It can do things for you, but it can also watch what you do, learn a task by watching you do it once, and work alongside you one step at a time.
+BrowserBuddy turns your real browser — Chrome or Firefox — into a space you share with an AI assistant. The assistant is not driving a separate throwaway browser somewhere off to the side — it is in the same window you are, with your logins, your tabs, and your session. It can do things for you, but it can also watch what you do, learn a task by watching you do it once, and work alongside you one step at a time.
 
 Five capabilities:
 
@@ -14,15 +14,27 @@ Five capabilities:
 
 ## How it compares
 
-Most browser tooling for assistants (chrome-devtools-mcp, Playwright MCP, and anything else built on the Chrome DevTools Protocol) drives a browser through a debug port — usually a fresh profile, always with an automation surface a site can detect: `navigator.webdriver`, the CDP infobar, an open debugging port. BrowserBuddy is a plain Chrome extension running in the browser you already use, so it inherits your real sessions and logins, opens no debug port, and sets no automation flags. The larger difference is direction: CDP tools only let an assistant *act*. BrowserBuddy also lets it *see* — what you clicked, what you typed, where you went — which is what makes lockstep collaboration and learning from demonstration possible at all.
+Most browser tooling for assistants (chrome-devtools-mcp, Playwright MCP, and anything else built on the Chrome DevTools Protocol) drives a browser through a debug port — usually a fresh profile, always with an automation surface a site can detect: `navigator.webdriver`, the CDP infobar, an open debugging port. BrowserBuddy is a plain browser extension running in the browser you already use, so it inherits your real sessions and logins, opens no debug port, and sets no automation flags. The larger difference is direction: CDP tools only let an assistant *act*. BrowserBuddy also lets it *see* — what you clicked, what you typed, where you went — which is what makes lockstep collaboration and learning from demonstration possible at all.
 
 ## Setup
 
 ### 1. Load the extension
 
+One `extension/` directory serves both browsers; the manifest declares both a service worker (Chrome) and an event page (Firefox), and each browser picks its own.
+
+**Chrome:**
+
 1. Open `chrome://extensions`.
 2. Turn on **Developer mode** (top right).
 3. Click **Load unpacked** and select the `extension/` directory of this repo.
+
+**Firefox (128 or newer):**
+
+1. Open `about:debugging`, choose **This Firefox**.
+2. Click **Load Temporary Add-on…** and select `extension/manifest.json`.
+3. Grant host permissions: open `about:addons` → BrowserBuddy → **Permissions** → enable **Access your data for all websites**. Firefox treats MV3 host permissions as opt-in, and without this grant the content script cannot run, so page reads, clicks, fills and observation will all fail.
+
+A temporary add-on is removed when Firefox exits; reload it after a restart. Firefox older than 128 refuses to install the extension (`strict_min_version` — main-world script injection, which `browser_eval` needs, does not exist before 128).
 
 The toolbar badge shows a green `●` while the extension is connected to the hub, and is cleared when it is not.
 
@@ -57,7 +69,7 @@ The server accepts two flags:
 
 ### 4. Ordering does not matter
 
-The server process runs only while a Claude Code session has the MCP server loaded; it exits with that session. The extension reconnects on its own on a fixed 1s/2s/5s/10s retry ladder, with a 30-second alarm as a backstop, so you can start Chrome first, Claude Code first, or restart either one mid-session. When the hub is down, no events are recorded and every acting tool fails loudly rather than pretending to work.
+The server process runs only while a Claude Code session has the MCP server loaded; it exits with that session. The extension reconnects on its own on a fixed 1s/2s/5s/10s retry ladder, with a 30-second alarm as a backstop, so you can start the browser first, Claude Code first, or restart either one mid-session. When the hub is down, no events are recorded and every acting tool fails loudly rather than pretending to work.
 
 If port 8590 is already occupied, the server exits immediately instead of picking another port — a silently relocated hub would leave the extension connected to nothing.
 
@@ -164,16 +176,18 @@ Accepted trade-offs in v0.1.0:
 
 - **Synthetic clicks are `isTrusted: false`.** Extension-generated events are distinguishable from human ones. Most sites do not care; a few hardened ones (some payment and anti-fraud flows) ignore them. Those steps need you — which is what lockstep is for.
 - **`browser_eval` is subject to page CSP.** A strict Content-Security-Policy can block main-world evaluation. This is reported as a hard error, not silently worked around.
-- **Screenshots capture the visible tab only.** Chrome can only capture what is on screen, so `browser_screenshot` activates the target tab first. Expect your foreground tab to change.
-- **No `chrome://` pages.** Content scripts cannot run on Chrome's internal pages, the Web Store, or other extensions' pages, so nothing there can be observed or acted on.
-- **One browser profile at a time.** The hub accepts a single extension connection; a new `hello` closes the previous one.
+- **Screenshots capture the visible tab only.** The browser can only capture what is on screen, so `browser_screenshot` activates the target tab first. Expect your foreground tab to change.
+- **Screenshots on Firefox need a gesture.** Firefox MV3 never treats granted host permissions as capture permission, so `browser_screenshot` fails with a hard error explaining the one supported path: click the BrowserBuddy toolbar button on the tab (this grants `activeTab`), then retry. The grant lasts until the tab navigates. On Chrome no gesture is needed.
+- **No browser-internal pages.** Content scripts cannot run on `chrome://` or `about:` pages, the Chrome Web Store, addons.mozilla.org, or other extensions' pages, so nothing there can be observed or acted on.
+- **Firefox suspends the background at idle.** Firefox does not count WebSocket traffic as background activity, so at idle it suspends the extension's event page and the 30-second alarm revives it — roughly one reconnect per minute, during which acting tools fail with the not-connected error (retry succeeds within ~30 s) and observed events are buffered, not lost. Chrome keeps the socket's service worker alive continuously.
+- **One browser profile at a time.** The hub accepts a single extension connection; a new `hello` closes the previous one. This also means Chrome and Firefox cannot be connected simultaneously.
 - **Port 8590 must be free.** The server exits rather than falling back to another port.
 
 ## Layout
 
-- `extension/` — Chrome MV3 extension
-  - `manifest.json` — MV3 manifest, permissions, service worker registration
-  - `background.js` — service worker: WebSocket client, tab-level observation, RPC dispatch, badge state
+- `extension/` — cross-browser MV3 extension (Chrome and Firefox, one codebase)
+  - `manifest.json` — MV3 manifest: permissions, both background entry points (service worker + event page), Firefox settings
+  - `background.js` — background script (service worker on Chrome, event page on Firefox): WebSocket client, tab-level observation, RPC dispatch, badge state
   - `content.js` — injected into pages: DOM observation, selector construction, redaction, DOM-level RPC execution
 - `server/` — Node.js process, MCP stdio server and WebSocket hub in one
   - `src/index.js` — entry point
