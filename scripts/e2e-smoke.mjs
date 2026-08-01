@@ -200,7 +200,7 @@ const serverStderr = [];
 async function startMcp({ Client, StdioClientTransport }) {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [SERVER_ENTRY, '--data-dir', DATA_DIR, '--port', String(PORT)],
+    args: [SERVER_ENTRY, 'serve', '--data-dir', DATA_DIR, '--port', String(PORT)],
     cwd: ROOT,
     stderr: 'pipe'
   });

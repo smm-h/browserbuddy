@@ -89,7 +89,7 @@ describe('MCP server integration', () => {
     dataDir = makeTmpDir('mcp');
     transport = new StdioClientTransport({
       command: process.execPath,
-      args: [path.join(SERVER_ROOT, 'src', 'index.js'), '--port', String(PORT), '--data-dir', dataDir],
+      args: [path.join(SERVER_ROOT, 'src', 'index.js'), 'serve', '--port', String(PORT), '--data-dir', dataDir],
       stderr: 'ignore'
     });
     client = new Client({ name: 'browserbuddy-test', version: '0.1.0' });

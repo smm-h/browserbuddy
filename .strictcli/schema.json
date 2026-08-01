@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "schema_version": 1,
+    "app": {
+      "env_prefix": null,
+      "config": false,
+      "global_flags": [],
+      "commands": {},
+      "groups": {},
+      "deprecated": {},
+      "tag_contracts": {}
+    },
+    "flag": {
+      "short": null,
+      "default": null,
+      "env": null,
+      "choices": null,
+      "repeatable": false,
+      "unique": false,
+      "env_separator": null,
+      "negatable": null,
+      "hidden": false
+    },
+    "arg": {
+      "type": "str",
+      "required": true,
+      "default": null,
+      "variadic": false,
+      "choices": null
+    },
+    "command": {
+      "passthrough": false,
+      "flags": [],
+      "args": [],
+      "tags": [],
+      "constraints": [],
+      "hidden": false,
+      "interactive": false
+    },
+    "group": {
+      "commands": {},
+      "groups": {},
+      "deprecated": {},
+      "tags": [],
+      "hidden": false
+    }
+  },
+  "project_id": "browserbuddy",
+  "name": "browserbuddy",
+  "version": "0.1.0",
+  "help": "Share one browser between you and your coding agent: an MCP stdio server plus the WebSocket hub the BrowserBuddy extension connects to.",
+  "commands": {
+    "serve": {
+      "name": "serve",
+      "help": "Run the MCP stdio server and the WebSocket hub the browser extension connects to.",
+      "flags": [
+        {
+          "name": "port",
+          "type": "int",
+          "help": "WebSocket hub port on 127.0.0.1. Must match WS_URL in extension/background.js.",
+          "default": 8590
+        },
+        {
+          "name": "data-dir",
+          "type": "str",
+          "help": "Directory for event logs and recorded demonstrations. Defaults to /home/m/Projects/browserbuddy/server/data."
+        }
+      ]
+    }
+  }
+}
