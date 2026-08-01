@@ -1,15 +1,24 @@
 'use strict';
 
-// BrowserBuddy MV3 service worker.
+// BrowserBuddy MV3 background script. Runs as a service worker on Chrome and
+// as an event page on Firefox (the manifest declares both entry points; each
+// browser picks its own).
 // Responsibilities:
 //   1. Maintain a WebSocket to the local hub (ws://127.0.0.1:8590/ws).
 //   2. Observe browser-level activity and stream it as events.
-//   3. Execute RPCs from the hub, either directly (chrome.* APIs) or by
+//   3. Execute RPCs from the hub, either directly (extension APIs) or by
 //      relaying to the content script in the target tab's top frame.
 //
-// MV3 note: every chrome.* listener in this file is registered synchronously at
-// the top level. Listeners registered inside async callbacks are lost when the
-// service worker is torn down and restarted.
+// MV3 note: every extension-API listener in this file is registered
+// synchronously at the top level. Listeners registered inside async callbacks
+// are lost when the background context is torn down and restarted.
+
+// Firefox's promise-based API surface is `browser` (its `chrome` namespace is
+// callback-based); Chrome's `chrome` is promise-based in MV3. Binding one name
+// gives the rest of the file the same promise-returning API on both browsers.
+// The binding must not be called `chrome`: redeclaring that name at the top
+// level of a Chrome service worker kills the whole script.
+const ext = typeof browser !== 'undefined' ? browser : chrome;
 
 const WS_URL = 'ws://127.0.0.1:8590/ws';
 const VERSION = '0.1.0';
@@ -44,7 +53,7 @@ let agentCreatingTabUntil = 0;
 /**
  * Epoch ms until which a windows.onFocusChanged is attributed to the agent.
  * Window focus carries no tab id, so a global window is the only handle; it is
- * set immediately before any chrome.windows.update({focused:true}) call.
+ * set immediately before any ext.windows.update({focused:true}) call.
  */
 let agentFocusUntil = 0;
 
@@ -58,9 +67,9 @@ function isOpen() {
 
 function setBadge(connected) {
   try {
-    chrome.action.setBadgeText({ text: connected ? '●' : '' });
+    ext.action.setBadgeText({ text: connected ? '●' : '' });
     if (connected) {
-      chrome.action.setBadgeBackgroundColor({ color: '#1a7f37' });
+      ext.action.setBadgeBackgroundColor({ color: '#1a7f37' });
     }
   } catch (e) {
     // The action API can be unavailable very early in worker startup.
@@ -188,7 +197,7 @@ function writeBufferToSession() {
   const payload = {};
   payload[BUFFER_KEY] = buffer.slice();
   try {
-    const p = chrome.storage.session.set(payload);
+    const p = ext.storage.session.set(payload);
     if (p && typeof p.catch === 'function') p.catch(function () {});
   } catch (e) {
     // Storage quota or context teardown; the in-memory buffer still holds it.
@@ -214,7 +223,7 @@ function persistBufferNow() {
 }
 
 function restoreBuffer() {
-  return chrome.storage.session
+  return ext.storage.session
     .get(BUFFER_KEY)
     .then(function (got) {
       const saved = got && got[BUFFER_KEY];
@@ -306,7 +315,7 @@ function resolveTabId(params) {
   if (params && typeof params.tabId === 'number') {
     return Promise.resolve(params.tabId);
   }
-  return chrome.tabs
+  return ext.tabs
     .query({ active: true, lastFocusedWindow: true, windowType: 'normal' })
     .then(function (tabs) {
       if (!tabs || tabs.length === 0 || typeof tabs[0].id !== 'number') {
@@ -371,14 +380,15 @@ function dispatchRpc(method, params) {
 function relayToContent(method, params) {
   return resolveTabId(params).then(function (tabId) {
     if (CONTENT_TAB_AFFECTING[method]) markAgentTab(tabId);
-    return chrome.tabs
+    return ext.tabs
       .sendMessage(tabId, { bb: 'rpc', method: method, params: params }, { frameId: 0 })
       .catch(function (err) {
         throw new Error(
           'Cannot reach the BrowserBuddy content script in tab ' +
             tabId +
-            '. This page does not allow content scripts (chrome://, the Chrome Web Store, ' +
-            'PDF//file viewers) or it has not finished loading. Underlying error: ' +
+            '. This page does not allow content scripts (browser-internal pages such as ' +
+            'chrome:// or about:, extension stores, PDF/file viewers) or it has not finished ' +
+            'loading. Underlying error: ' +
             errorMessage(err)
         );
       })
@@ -393,7 +403,7 @@ function relayToContent(method, params) {
 }
 
 function rpcListTabs() {
-  return chrome.tabs.query({}).then(function (tabs) {
+  return ext.tabs.query({}).then(function (tabs) {
     return {
       tabs: tabs.map(function (t) {
         return {
@@ -413,7 +423,7 @@ function rpcNewTab(params) {
   if (params && typeof params.url === 'string') opts.url = params.url;
   // Must be set before create(): onCreated fires before the promise resolves.
   agentCreatingTabUntil = Date.now() + AGENT_TAG_WINDOW_MS;
-  return chrome.tabs.create(opts).then(function (tab) {
+  return ext.tabs.create(opts).then(function (tab) {
     markAgentTab(tab.id);
     return { tabId: tab.id };
   });
@@ -422,7 +432,7 @@ function rpcNewTab(params) {
 function rpcCloseTab(params) {
   return resolveTabId(params).then(function (tabId) {
     markAgentTab(tabId);
-    return chrome.tabs.remove(tabId).then(function () {
+    return ext.tabs.remove(tabId).then(function () {
       return {};
     });
   });
@@ -431,11 +441,11 @@ function rpcCloseTab(params) {
 function rpcActivateTab(params) {
   return resolveTabId(params).then(function (tabId) {
     markAgentTab(tabId);
-    return chrome.tabs.update(tabId, { active: true }).then(function (tab) {
+    return ext.tabs.update(tabId, { active: true }).then(function (tab) {
       // The focus change is the agent's doing; windows.onFocusChanged has no
       // tab id to key on, so a global window covers it.
       agentFocusUntil = Date.now() + AGENT_TAG_WINDOW_MS;
-      return chrome.windows.update(tab.windowId, { focused: true }).then(function () {
+      return ext.windows.update(tab.windowId, { focused: true }).then(function () {
         return {};
       });
     });
@@ -448,7 +458,7 @@ function rpcNavigate(params) {
   }
   return resolveTabId(params).then(function (tabId) {
     markAgentTab(tabId);
-    return chrome.tabs.update(tabId, { url: params.url }).then(function () {
+    return ext.tabs.update(tabId, { url: params.url }).then(function () {
       return { tabId: tabId };
     });
   });
@@ -457,7 +467,7 @@ function rpcNavigate(params) {
 function rpcHistory(params, which) {
   return resolveTabId(params).then(function (tabId) {
     markAgentTab(tabId);
-    return chrome.tabs[which](tabId).then(function () {
+    return ext.tabs[which](tabId).then(function () {
       return {};
     });
   });
@@ -466,7 +476,7 @@ function rpcHistory(params, which) {
 function rpcReload(params) {
   return resolveTabId(params).then(function (tabId) {
     markAgentTab(tabId);
-    return chrome.tabs.reload(tabId).then(function () {
+    return ext.tabs.reload(tabId).then(function () {
       return {};
     });
   });
@@ -475,13 +485,13 @@ function rpcReload(params) {
 function rpcScreenshot(params) {
   return resolveTabId(params)
     .then(function (tabId) {
-      return chrome.tabs.get(tabId);
+      return ext.tabs.get(tabId);
     })
     .then(function (tab) {
       if (tab.active) return tab;
       // The activation is the agent's doing, not the user's.
       markAgentTab(tab.id);
-      return chrome.tabs
+      return ext.tabs
         .update(tab.id, { active: true })
         .then(function () {
           return delay(350);
@@ -491,7 +501,24 @@ function rpcScreenshot(params) {
         });
     })
     .then(function (tab) {
-      return chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 70 });
+      return ext.tabs
+        .captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 70 })
+        .catch(function (err) {
+          const msg = errorMessage(err);
+          if (msg.indexOf('activeTab') !== -1) {
+            // Firefox MV3 never treats granted host permissions as the
+            // "<all_urls>" capture permission, so gesture-less capture is
+            // impossible there. Explain the one supported path instead.
+            throw new Error(
+              'Screenshot failed: ' +
+                msg +
+                '. Firefox only allows tab capture after a user gesture grants activeTab: ' +
+                'click the BrowserBuddy toolbar button on that tab, then retry. ' +
+                'The grant lasts until the tab navigates.'
+            );
+          }
+          throw err;
+        });
     })
     .then(function (dataUrl) {
       const prefix = 'data:image/jpeg;base64,';
@@ -508,7 +535,7 @@ function rpcZoom(params) {
   }
   return resolveTabId(params).then(function (tabId) {
     markAgentTab(tabId);
-    return chrome.tabs.setZoom(tabId, params.factor).then(function () {
+    return ext.tabs.setZoom(tabId, params.factor).then(function () {
       return {};
     });
   });
@@ -523,7 +550,7 @@ function rpcDownload(params) {
     opts.filename = params.filename;
   }
   agentDownloadUntil = Date.now() + AGENT_TAG_WINDOW_MS;
-  return chrome.downloads.download(opts).then(function (downloadId) {
+  return ext.downloads.download(opts).then(function (downloadId) {
     return { downloadId: downloadId };
   });
 }
@@ -536,7 +563,7 @@ function rpcDownload(params) {
 function raiseContentAgentWindow(tabId) {
   let p;
   try {
-    p = chrome.tabs.sendMessage(
+    p = ext.tabs.sendMessage(
       tabId,
       { bb: 'agentWindow', ms: AGENT_TAG_WINDOW_MS },
       { frameId: 0 }
@@ -558,7 +585,7 @@ function rpcRunJs(params) {
     // code causes are attributed to the agent instead of the user.
     return raiseContentAgentWindow(tabId)
       .then(function () {
-        return chrome.scripting.executeScript({
+        return ext.scripting.executeScript({
           target: { tabId: tabId, frameIds: [0] },
           world: 'MAIN',
           func: function (c) {
@@ -589,20 +616,20 @@ function rpcRunJs(params) {
 // Browser observation (all listeners registered synchronously)
 // ---------------------------------------------------------------------------
 
-chrome.tabs.onCreated.addListener(function (tab) {
+ext.tabs.onCreated.addListener(function (tab) {
   // A tab created inside the newTab RPC window belongs to the agent; mark it
   // before emitting so this event and the tab's later events both say "agent".
   if (Date.now() < agentCreatingTabUntil) markAgentTab(tab.id);
   emitTabEvent('tab_created', tab.id, tab.pendingUrl || tab.url || null, {});
 });
 
-chrome.tabs.onRemoved.addListener(function (tabId) {
+ext.tabs.onRemoved.addListener(function (tabId) {
   emitTabEvent('tab_closed', tabId, null, {});
   agentTabs.delete(tabId);
 });
 
-chrome.tabs.onActivated.addListener(function (info) {
-  chrome.tabs
+ext.tabs.onActivated.addListener(function (info) {
+  ext.tabs
     .get(info.tabId)
     .then(function (tab) {
       emitTabEvent('tab_activated', info.tabId, tab.url || null, { title: tab.title || null });
@@ -612,16 +639,16 @@ chrome.tabs.onActivated.addListener(function (info) {
     });
 });
 
-chrome.webNavigation.onCommitted.addListener(function (details) {
+ext.webNavigation.onCommitted.addListener(function (details) {
   if (details.frameId !== 0) return;
   emitTabEvent('navigation', details.tabId, details.url || null, {
     transitionType: details.transitionType || null
   });
 });
 
-chrome.webNavigation.onCompleted.addListener(function (details) {
+ext.webNavigation.onCompleted.addListener(function (details) {
   if (details.frameId !== 0) return;
-  chrome.tabs
+  ext.tabs
     .get(details.tabId)
     .then(function (tab) {
       emitTabEvent('page_loaded', details.tabId, details.url || null, { title: tab.title || null });
@@ -631,22 +658,22 @@ chrome.webNavigation.onCompleted.addListener(function (details) {
     });
 });
 
-chrome.downloads.onCreated.addListener(function (item) {
+ext.downloads.onCreated.addListener(function (item) {
   const raw = item.filename || '';
   const filename = raw ? raw.split(/[\\/]/).pop() : null;
   const actor = Date.now() <= agentDownloadUntil ? 'agent' : 'user';
   emitGlobalEvent('download_started', actor, item.url || null, { filename: filename });
 });
 
-chrome.windows.onFocusChanged.addListener(function (windowId) {
+ext.windows.onFocusChanged.addListener(function (windowId) {
   const actor = Date.now() <= agentFocusUntil ? 'agent' : 'user';
   emitGlobalEvent('window_focus', actor, null, {
-    focused: windowId !== chrome.windows.WINDOW_ID_NONE
+    focused: windowId !== ext.windows.WINDOW_ID_NONE
   });
 });
 
 // Events forwarded from content scripts.
-chrome.runtime.onMessage.addListener(function (msg, sender) {
+ext.runtime.onMessage.addListener(function (msg, sender) {
   if (!msg || msg.bb !== 'event' || !msg.event) return;
   const event = msg.event;
   event.tabId = sender && sender.tab && typeof sender.tab.id === 'number' ? sender.tab.id : null;
@@ -660,17 +687,17 @@ chrome.runtime.onMessage.addListener(function (msg, sender) {
 
 // Keeps the worker awake and retries the socket if the backoff timer was lost
 // to a service-worker teardown.
-chrome.alarms.create('bb-keepalive', { periodInMinutes: 0.5 });
-chrome.alarms.onAlarm.addListener(function (alarm) {
+ext.alarms.create('bb-keepalive', { periodInMinutes: 0.5 });
+ext.alarms.onAlarm.addListener(function (alarm) {
   if (alarm.name !== 'bb-keepalive') return;
   connect();
 });
 
-chrome.runtime.onStartup.addListener(function () {
+ext.runtime.onStartup.addListener(function () {
   connect();
 });
 
-chrome.runtime.onInstalled.addListener(function () {
+ext.runtime.onInstalled.addListener(function () {
   connect();
 });
 

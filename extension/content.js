@@ -8,6 +8,10 @@
   if (window.__browserBuddyLoaded) return;
   window.__browserBuddyLoaded = true;
 
+  // Firefox's promise-based API surface is `browser`; Chrome's `chrome` is
+  // promise-based in MV3. One binding gives both browsers the same surface.
+  const ext = typeof browser !== 'undefined' ? browser : chrome;
+
   const INPUT_DEBOUNCE_MS = 800;
   const SCROLL_DEBOUNCE_MS = 600;
   const TEXT_CAP = 15000;
@@ -254,7 +258,7 @@
   // the 100ms agentActing window has already closed).
   function emit(type, data, actorOverride) {
     try {
-      const p = chrome.runtime.sendMessage({
+      const p = ext.runtime.sendMessage({
         bb: 'event',
         event: {
           ts: Date.now(),
@@ -791,7 +795,7 @@
     }
   }
 
-  chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
+  ext.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     if (!msg) return;
     if (msg.bb === 'agentWindow') {
       raiseAgentWindow(msg.ms);

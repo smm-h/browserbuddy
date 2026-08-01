@@ -15,7 +15,17 @@
   ],
   "host_permissions": ["<all_urls>"],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://127.0.0.1:*"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "browserbuddy@localhost",
+      "strict_min_version": "128.0"
+    }
   },
   "content_scripts": [
     {
