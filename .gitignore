@@ -18,3 +18,18 @@ __pycache__/
 
 # Claude Code local session settings
 .claude/settings.local.json
+
+*.pyc
+coverage/
+build/
+dist/
+target/
+*.egg-info/
+.rlsbl-notes-*.tmp
+.rlsbl/lock
+.rlsbl-monorepo/lock
+.credentials.json
+.*-cache.json
+.env
+.env.local
+*.local-only
