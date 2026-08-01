@@ -1,11 +1,13 @@
 # strictspec document version gate (do not remove)
 format_version = 1
 # Version bump type: patch, minor, major, infra, or prerelease
-bump = ""
+bump = "minor"
 # Short description of this release (required)
-description = ""
+description = "First public release of BrowserBuddy: an MCP server plus a Chrome/Firefox extension that turn your real browser into a shared space with an AI assistant — it can act for you, watch what you do, wait for you in lockstep, and learn tasks from demonstration."
 # Optional context explaining why these changes were made
-context = ""
+context = """
+BrowserBuddy differs from CDP-based browser automation (chrome-devtools-mcp, Playwright MCP) by running as a WebExtension inside the user's real, logged-in browser and by being bidirectional: a live stream of user actions with agent/user attribution, a browser_wait_for_user lockstep primitive, and demonstration recording. The PyPI package of the same name is a deliberate name reservation; the server ships on npm.
+"""
 # Pre-release identifier: alpha, beta, rc, or stable
 # preid = ""
 # Set to true to generate a blog post for this release
