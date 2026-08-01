@@ -8,7 +8,7 @@ Three pieces of code, in two processes.
 
 - **Content script** (`extension/content.js`) — injected into the top frame of every eligible page. It is the only component that touches the DOM. It observes user interaction (clicks, typing, submits, scrolling, copy/paste), builds selectors, applies redaction, and executes exactly six RPCs: `readPage`, `click`, `fill`, `scroll`, `setClipboard`, `getPageState`. Sensitive values are filtered here, at the source, so they never leave the page.
 - **Background script** (`extension/background.js`) — the extension's coordinator, running as a service worker on Chrome and as an event page on Firefox (the manifest declares both entry points; each browser picks its own). It owns the WebSocket connection to the hub, observes browser-level activity through the extension APIs (tabs, `webNavigation`, downloads, window focus), executes the tab-level half of the RPC surface, routes the six page-level RPCs to the right content script, buffers events while disconnected, and maintains the toolbar badge. `runJs` is its responsibility too: it injects into the page's main world with the `scripting` API, bypassing the content script entirely. Both extension scripts bind the API namespace once — `const ext = typeof browser !== 'undefined' ? browser : chrome` — which yields Firefox's promise-based `browser` there and Chrome's (equally promise-based in MV3) `chrome` elsewhere; the rest of the code is identical on both browsers. The binding is deliberately not named `chrome`: redeclaring that name at the top level of a Chrome service worker kills the whole script.
-- **Server** (`server/src/index.js` plus `hub.js`, `store.js`, `demos.js`, `mcp.js`) — one Node.js process (>= 20) presenting two interfaces: an MCP server over stdio for Claude Code, and the WebSocket hub for the extension. It holds the event store (ring buffer plus JSONL logs), the demonstration store, and the 25 MCP tool implementations.
+- **Server** (`server/src/index.js` and `cli.js` plus `hub.js`, `store.js`, `demos.js`, `mcp.js`) — one Node.js process (>= 22), started with `browserbuddy serve`, presenting two interfaces: an MCP server over stdio for Claude Code, and the WebSocket hub for the extension. It holds the event store (ring buffer plus JSONL logs), the demonstration store, and the 25 MCP tool implementations.
 
 The user's browser and the assistant's process meet only at the hub. There is no direct channel between the MCP client and the browser.
 
@@ -51,7 +51,7 @@ The hub also gates on the handshake: only the socket that most recently complete
 
 The cost is one hard constraint: **stdout belongs exclusively to the MCP protocol.** MCP over stdio uses stdin and stdout as the framed message channel; a single stray `console.log` corrupts the stream and breaks the session. So:
 
-- No component may write to stdout except the MCP transport.
+- No component may write to stdout except the MCP transport. That includes the CLI layer: the `serve` handler never uses strictcli's `ctx.info`, which writes to stdout. `--help`, `--version` and `--dump-schema` do print to stdout, but they exit before any MCP session starts.
 - All logging, including hub, WebSocket and event-store diagnostics, goes to stderr.
 - Startup failures (occupied port, unwritable data directory) are reported on stderr and terminate the process. They are never written to stdout, and never swallowed.
 

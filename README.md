@@ -46,21 +46,21 @@ const WS_URL = 'ws://127.0.0.1:8590/ws';
 
 There is no options page and no configuration UI. If you run the server on another port, edit that line and reload the extension.
 
-### 2. Install the server's dependencies
+### 2. Install the dependencies
 
 ```
-cd server && npm install
+npm install
 ```
 
-Node.js 20 or newer is required.
+Node.js 22 or newer is required.
 
 ### 3. Register the MCP server with Claude Code
 
 ```
-claude mcp add browserbuddy -- node /home/m/Projects/browserbuddy/server/src/index.js
+claude mcp add browserbuddy -- node /home/m/Projects/browserbuddy/server/src/index.js serve
 ```
 
-The server accepts two flags:
+The `serve` command accepts two flags:
 
 | Flag | Default | Purpose |
 | --- | --- | --- |
@@ -189,8 +189,10 @@ Accepted trade-offs in v0.1.0:
   - `manifest.json` — MV3 manifest: permissions, both background entry points (service worker + event page), Firefox settings
   - `background.js` — background script (service worker on Chrome, event page on Firefox): WebSocket client, tab-level observation, RPC dispatch, badge state
   - `content.js` — injected into pages: DOM observation, selector construction, redaction, DOM-level RPC execution
+- `package.json` — the npm package root (`browserbuddy`); `npm install` and `npm test` run from here
 - `server/` — Node.js process, MCP stdio server and WebSocket hub in one
-  - `src/index.js` — entry point
+  - `src/index.js` — `browserbuddy` bin entry point
+  - `src/cli.js` — strictcli command definition (`serve`) and server startup
   - `data/` — runtime state (gitignored)
     - `events/` — JSONL event logs
     - `demos/` — recorded demonstrations
