@@ -1,3 +1,8 @@
+---
+title: Architecture
+description: "How BrowserBuddy is put together: content script, background script and Node hub, how events flow between them, and why it trades control for presence."
+---
+
 # BrowserBuddy architecture (v0.1.0)
 
 This document explains how BrowserBuddy is put together and why. The wire format itself is specified separately in [PROTOCOL.md](PROTOCOL.md); this document covers structure, data flow and design rationale.

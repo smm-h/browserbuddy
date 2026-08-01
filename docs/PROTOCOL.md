@@ -1,3 +1,8 @@
+---
+title: Protocol
+description: "The normative WebSocket contract between the extension and the local hub: framing, handshake, keepalive, the event stream, and the full RPC surface."
+---
+
 # BrowserBuddy wire protocol (v0.1.0)
 
 This document specifies the complete protocol between the browser extension and the local hub. It is intended to be sufficient to reimplement either side without reading the other's source. The protocol is browser-agnostic: the same extension code speaks it from Chrome and from Firefox, and the hub cannot tell them apart.
