@@ -8,17 +8,27 @@ BrowserBuddy 0.1.0 is a shared browser for you and your coding agent: one Node.j
 
 - `extension/` — the WebExtension, loaded unpacked (Chrome) or as a temporary add-on (Firefox).
   - `manifest.json` — MV3 manifest; declares both background entry points (service worker for Chrome, event page for Firefox) and `strict_min_version` 128 for Firefox.
-  - `background.js` — WebSocket client, reconnect ladder, browser-level observation (tabs, navigation, downloads), RPC dispatch, badge state.
+  - `background.js` — transport selection (`TRANSPORT`, `native` by default), reconnect ladder, browser-level observation (tabs, navigation, downloads), RPC dispatch, badge state. The WebSocket client is still here, dormant, reached only when `TRANSPORT` is `websocket`.
+  - `transport-native.js` — the `connectNative` transport. Shares the background global scope (Chrome `importScripts`, Firefox `background.scripts`); surfaces a precise hard error naming the host and both expected manifest paths when the host cannot be spawned.
   - `content.js` — injected into pages: DOM observation, selector construction, redaction, and the page-level half of the RPC surface.
 - `server/src/` — the Node process.
   - `index.js` — `browserbuddy` bin entry point; runs the CLI and reports fatal errors on stderr.
   - `cli.js` — strictcli app (`serve` with `--port`, `--data-dir`), plus `startServer` which wires hub, store, demos and the MCP server together.
   - `hub.js` — WebSocket server: one extension connection at a time, RPC request/response correlation with timeouts, event fan-out.
+  - `rpc-peer.js` — `PendingRpcs`, the one in-flight RPC table both transports use.
+  - `native-host-bin.js` — the executable the browser spawns via `connectNative`. Deliberately not a strictcli app: the browser appends its own arguments. Hands fd 1 to the framing channel and points the process stdout stream at stderr.
+  - `native-messaging.js` — the browser's wire framing: 32-bit little-endian length + UTF-8 JSON, 1 MB cap, incremental decoder.
+  - `native-hub.js` — the Hub interface (`isConnected`/`rpc`/`event`) over the native pipe, so `mcp.js` is transport-blind.
+  - `http-mcp.js` — Streamable-HTTP MCP on an ephemeral loopback port behind a bearer token; one MCP session per `initialize`.
+  - `endpoint-file.js` — atomic, mode-0600 `mcp-endpoint.json` writer: the live url and token an MCP client dials.
+  - `host-manifest.js` — Chrome/Firefox native-messaging host manifests, the launcher script, and the Chrome-id-from-key derivation.
   - `store.js` — event store: 1000-entry ring buffer, per-UTC-day JSONL append, `query` and `waitFor` (the lockstep primitive).
   - `mcp.js` — the MCP tool surface: 18 acting, 3 observing, 4 learning tools, with zod schemas.
   - `demos.js` — demonstration recorder: captures user events while recording, cleans them into a replayable step list, persists one JSON file per demo.
-- `server/test/` — `node --test` suite, including a fake extension driver (`fake-extension.js`) for hub/MCP tests.
-- `scripts/e2e-smoke.mjs` — live end-to-end smoke test against a real browser with the real extension.
+- `server/test/` — `node --test` suite, including a fake extension driver (`fake-extension.js`) for hub/MCP tests and a fake browser (`fake-native-extension.js`) that spawns the real host over real pipes.
+- `scripts/e2e-smoke.mjs` — live end-to-end smoke test of the WebSocket carrier against a real browser with the real extension.
+- `scripts/spike-nativemsg.mjs` — live end-to-end proof of the native-messaging carrier: installs the host manifest into a throwaway Chromium profile, lets the browser spawn the host, then drives the MCP tools over HTTP.
+- `scripts/install-native-host.mjs` — writes the native-messaging host manifest and launcher for a named Chromium user-data-dir or Firefox HOME.
 - `docs/` — `PROTOCOL.md` (normative wire contract) and `ARCHITECTURE.md` (components, data flow, rationale), both hand-maintained; `_README.md` and `_CLAUDE.md` are the selfdoc templates for the root files.
 - `pypi/` — PyPI name-reservation placeholder package only. Not the product; do not grow it.
 
@@ -42,6 +52,7 @@ BrowserBuddy 0.1.0 is a shared browser for you and your coding agent: one Node.j
 - `npm test` — the unit/integration suite (`node --test server/test/*.test.js`). Must be green before any commit.
 - `node scripts/e2e-smoke.mjs` — live end-to-end run: spawns the real server, launches a real browser with `extension/` loaded, and exercises the MCP tools against live pages. `--browser firefox` runs the Firefox path (default is chromium); `--keep` and `--headed` help when debugging.
 - `node scripts/e2e-smoke.mjs --port <n>` — the default port 8590 may be held by a live BrowserBuddy session; pass another port rather than killing the session.
+- `node scripts/spike-nativemsg.mjs` — live end-to-end run of the native-messaging carrier on Chromium: the browser spawns the host, and the MCP tools are driven over the host's loopback HTTP endpoint. Needs no free port (the host picks an ephemeral one) and writes nothing outside `server/test/.tmp/`. `--idle-probe-sec N` measures whether the native port survives N seconds of an idle MV3 service worker.
 
 ## Releases
 

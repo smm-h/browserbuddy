@@ -13,7 +13,7 @@ order: 91
 
 Share one browser between you and your coding agent: an MCP stdio server plus the WebSocket hub the BrowserBuddy extension connects to.
 
-Version: 0.1.0
+Version: :-: var key="project.version"
 
 ## Commands
 

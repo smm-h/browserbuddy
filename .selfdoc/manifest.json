@@ -38,6 +38,11 @@
       "type": "doc"
     },
     {
+      "path": "extension-transport-native.md",
+      "title": "extension/transport-native",
+      "type": "doc"
+    },
+    {
       "path": "gen-index.md",
       "title": "API Reference",
       "type": "doc"
@@ -58,6 +63,21 @@
       "type": "doc"
     },
     {
+      "path": "server-src-endpoint-file.md",
+      "title": "server/src/endpoint-file",
+      "type": "doc"
+    },
+    {
+      "path": "server-src-host-manifest.md",
+      "title": "server/src/host-manifest",
+      "type": "doc"
+    },
+    {
+      "path": "server-src-http-mcp.md",
+      "title": "server/src/http-mcp",
+      "type": "doc"
+    },
+    {
       "path": "server-src-hub.md",
       "title": "server/src/hub",
       "type": "doc"
@@ -73,11 +93,36 @@
       "type": "doc"
     },
     {
+      "path": "server-src-native-host-bin.md",
+      "title": "server/src/native-host-bin",
+      "type": "doc"
+    },
+    {
+      "path": "server-src-native-host.md",
+      "title": "server/src/native-host",
+      "type": "doc"
+    },
+    {
+      "path": "server-src-native-hub.md",
+      "title": "server/src/native-hub",
+      "type": "doc"
+    },
+    {
+      "path": "server-src-native-messaging.md",
+      "title": "server/src/native-messaging",
+      "type": "doc"
+    },
+    {
+      "path": "server-src-rpc-peer.md",
+      "title": "server/src/rpc-peer",
+      "type": "doc"
+    },
+    {
       "path": "server-src-store.md",
       "title": "server/src/store",
       "type": "doc"
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-01T17:21:26.976735+00:00"
+  "last_gen": "2026-08-03T20:12:11.410606+00:00"
 }
