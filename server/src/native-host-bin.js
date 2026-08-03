@@ -35,6 +35,8 @@ process.stdout.write = (chunk, encoding, callback) => process.stderr.write(chunk
 
 process.stdin.pause();
 
+let host = null;
+
 startNativeHost({
   input: process.stdin,
   output: nativeOut,
@@ -42,7 +44,8 @@ startNativeHost({
   port: portArg ? Number(portArg) : 0,
   onExit: () => process.exit(0)
 })
-  .then(() => {
+  .then((started) => {
+    host = started;
     process.stdin.resume();
   })
   .catch((err) => {
@@ -50,6 +53,15 @@ startNativeHost({
     process.exit(1);
   });
 
-for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.on(signal, () => process.exit(0));
+// A signal must run the same shutdown the closed pipe runs. Exiting straight
+// from the handler would leave mcp-endpoint.json behind, pointing every future
+// client at a port that no longer exists.
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => {
+    if (!host) process.exit(0);
+    host.shutdown(`received ${signal}`).then(
+      () => process.exit(0),
+      () => process.exit(1)
+    );
+  });
 }
