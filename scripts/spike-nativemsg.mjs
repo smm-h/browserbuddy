@@ -39,7 +39,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { installNativeHost } from './install-native-host.mjs';
 import { HOST_NAME } from '../server/src/host-manifest.js';
-import { ENDPOINT_FILENAME } from '../server/src/endpoint-file.js';
+import { ENDPOINT_FILENAME, readEndpointFile } from '../server/src/endpoint-file.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -218,18 +218,19 @@ async function stopBrowser() {
   browserChild = null;
 }
 
-/** The host writes mcp-endpoint.json only after the browser spawned it. */
+/**
+ * The host writes mcp-endpoint.json only after the browser spawned it.
+ * readEndpointFile returns null while there is no live endpoint (absent file,
+ * or one left behind by a host that is gone), so polling it is exactly right.
+ */
 async function waitForEndpointFile(timeoutMs) {
-  const file = path.join(DATA_DIR, ENDPOINT_FILENAME);
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    if (fs.existsSync(file)) {
-      try {
-        const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-        if (parsed.url && parsed.token) return parsed;
-      } catch {
-        /* half-written; the writer renames atomically, so just retry */
-      }
+    try {
+      const parsed = readEndpointFile(DATA_DIR);
+      if (parsed && parsed.url && parsed.token) return parsed;
+    } catch {
+      /* half-written or malformed; the writer renames atomically, so retry */
     }
     if (Date.now() >= deadline) return null;
     await sleep(300);

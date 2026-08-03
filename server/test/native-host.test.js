@@ -2,6 +2,7 @@ import { test, describe, before, after, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import net from 'node:net';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
@@ -16,6 +17,7 @@ import {
 import { chromeExtensionIdFromKey, chromeHostManifest, firefoxHostManifest, HOST_NAME } from '../src/host-manifest.js';
 import {
   readEndpointFile,
+  writeEndpointFile,
   endpointPath,
   endpointStatePath,
   readEndpointState
@@ -105,6 +107,41 @@ describe('extension-side result bounding', () => {
   test('both large-result RPCs are measured before they are sent', () => {
     assert.match(background, /assertResultSize\('screenshot',/);
     assert.match(background, /assertResultSize\('runJs',/);
+  });
+});
+
+describe('endpoint file staleness', () => {
+  let dir;
+
+  beforeEach(() => {
+    dir = makeTmpDir('endpoint-file');
+  });
+
+  afterEach(() => removeTmpDir(dir));
+
+  test('no file at all reads as no live endpoint', () => {
+    assert.equal(readEndpointFile(dir), null);
+  });
+
+  test('a descriptor whose pid is alive reads back', () => {
+    writeEndpointFile(dir, { url: 'http://127.0.0.1:1234/mcp', token: 'tok' });
+    const got = readEndpointFile(dir);
+    assert.equal(got.url, 'http://127.0.0.1:1234/mcp');
+    assert.equal(got.pid, process.pid);
+  });
+
+  test('a descriptor whose pid is dead is treated as absent', () => {
+    // A host that was killed leaves its descriptor behind; a client dialling it
+    // would hit a port that may since belong to something else.
+    const dead = spawnSync(process.execPath, ['-e', 'process.exit(0)']);
+    assert.equal(dead.status, 0);
+    writeEndpointFile(dir, { url: 'http://127.0.0.1:1234/mcp', token: 'tok', pid: dead.pid });
+    assert.equal(readEndpointFile(dir), null);
+  });
+
+  test('a descriptor with no pid is a hard error, not a guess', () => {
+    fs.writeFileSync(endpointPath(dir), JSON.stringify({ url: 'http://x/mcp', token: 't' }));
+    assert.throws(() => readEndpointFile(dir), /no integer "pid"/);
   });
 });
 

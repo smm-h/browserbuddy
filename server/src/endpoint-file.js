@@ -95,8 +95,45 @@ export function writeEndpointFile(dataDir, { url, token, pid = process.pid, extr
   return target;
 }
 
+/** True when a process with this pid exists and we may signal it. */
+function pidIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM means the process exists but belongs to another user, which for a
+    // 0600 file we wrote ourselves should not happen -- still, it is alive.
+    return err.code === 'EPERM';
+  }
+}
+
+/**
+ * Reads the endpoint descriptor, or null when there is no *live* endpoint.
+ *
+ * A host that was killed rather than shut down leaves its descriptor behind,
+ * and a client that dialled it would get a connection refused on a port that
+ * may since have been handed to something else entirely. The recorded pid is
+ * therefore checked: a file whose pid is gone is stale and reads as absent,
+ * exactly as PROTOCOL.md §1.1 specifies. A malformed or pid-less file is a hard
+ * error -- it is not a state we ever write, so guessing about it would hide a
+ * real problem.
+ */
 export function readEndpointFile(dataDir) {
-  return JSON.parse(fs.readFileSync(endpointPath(dataDir), 'utf8'));
+  let raw;
+  try {
+    raw = fs.readFileSync(endpointPath(dataDir), 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+  const descriptor = JSON.parse(raw);
+  if (!Number.isInteger(descriptor.pid)) {
+    throw new Error(
+      `${endpointPath(dataDir)} has no integer "pid", so its liveness cannot be checked. ` +
+        'Delete it and let the browser respawn the native host.'
+    );
+  }
+  return pidIsAlive(descriptor.pid) ? descriptor : null;
 }
 
 /** Removes the descriptor. A stale file would point clients at a dead port. */
