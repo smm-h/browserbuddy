@@ -243,6 +243,9 @@
   // Event emission
   // ---------------------------------------------------------------------
 
+  // The protocol's actor set is 'user', 'agent' and 'replay'; 'replay' is
+  // reserved for future demonstration playback and is never emitted, so page
+  // observation only ever decides between the user and the agent.
   function currentActor() {
     return agentActing || Date.now() <= agentUntil ? 'agent' : 'user';
   }

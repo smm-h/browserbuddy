@@ -126,7 +126,7 @@ Fields of the inner `event` object as sent by the extension:
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `ts` | integer | yes | Epoch milliseconds at which the extension observed the event. |
-| `actor` | string | yes | `"user"` or `"agent"`. See §6. |
+| `actor` | string | yes | One of `"user"`, `"agent"`, `"replay"`. Only the first two are ever emitted in v0.1.0; see §6. |
 | `type` | string | yes | One of the event types in §4.3. A type the hub does not know is recorded, not rejected; see §4.3.1. |
 | `tabId` | integer \| null | yes | Browser tab id. `null` for window-level events with no associated tab. |
 | `url` | string \| null | yes | URL of the tab at the time of the event. `null` when unknown or not applicable. |
@@ -259,6 +259,16 @@ Redaction is applied to the *reported* value only. The `fill` RPC will happily w
 ## 6. Attribution
 
 Every event carries `actor`, which is `"user"` for something the human did and `"agent"` for a side effect of the assistant's own commands. Without this, an assistant that clicks a link would then observe "the user navigated" and could act on its own echo.
+
+The actor set is `user`, `agent`, `replay`.
+
+`replay` is **reserved for future deterministic playback of a recorded demonstration and is never emitted in v0.1.0.** It exists in the enumeration now so that nothing else can claim the name and so consumers can already validate against the final set. Concretely:
+
+- Nothing in the extension or the host produces an event with `actor: "replay"`. Both attribution layers of this section decide between `user` and `agent` only.
+- `browser_observe` accepts `actor: "replay"` and returns an empty event list. It is a valid query, not an error, and it will stay valid when playback lands.
+- `browser_wait_for_user` waits on `user` only, and will continue to. A replayed step must never wake a caller waiting for the human, for the same reason an agent action must not.
+
+Replay is a distinct actor rather than a flavour of `agent` because a replayed demonstration is neither party acting live: labelling it `agent` would make `browser_observe {actor:"agent"}` mix commands the assistant issued with steps a recording drove, and labelling it `user` would let a replayer wake a `browser_wait_for_user` it started itself.
 
 Attribution is applied in two layers, because the two layers see different effects. Both layers are time-windowed; neither carries a correlation token.
 
@@ -433,5 +443,5 @@ The six page-interaction methods above require a content script in the target ta
 - On the native carrier the size limits are per direction (1 MB out of the host, 128 MB into it, 64 MB per result at the source), and an oversize result fails one call rather than the pipe.
 - On the native carrier the bearer token is stable across host respawns and the port is reclaimed whenever it is free, so a configured MCP endpoint keeps working; a descriptor whose `pid` is dead is no endpoint.
 - Redaction happens in the page, before transmission, for events, reads and demonstrations alike.
-- Every event is attributed to `user` or `agent`; observation defaults to `user`.
+- Every event is attributed to one of `user`, `agent`, `replay`; only the first two are emitted in v0.1.0, and observation defaults to `user`.
 - Failures are explicit `ok:false` errors. Nothing is queued, retried, or silently substituted.

@@ -375,6 +375,12 @@ function markAgentTab(tabId) {
   }
 }
 
+/**
+ * The actor for a background-emitted event about this tab. The protocol defines
+ * three actor values -- 'user', 'agent' and 'replay' -- but 'replay' is reserved
+ * for future deterministic playback of a demonstration and nothing emits it,
+ * here or anywhere else, so this decides between the two live ones.
+ */
 function actorForTab(tabId) {
   if (typeof tabId !== 'number') return 'user';
   const until = agentTabs.get(tabId);

@@ -2,7 +2,7 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { EventStore, KNOWN_EVENT_TYPES } from '../src/store.js';
+import { EventStore, KNOWN_EVENT_TYPES, ACTOR_VALUES } from '../src/store.js';
 import { makeTmpDir, removeTmpDir, makeEvent } from './helpers.js';
 
 describe('EventStore', () => {
@@ -104,6 +104,29 @@ describe('EventStore', () => {
   test('waitFor resolves null on timeout', async () => {
     const got = await store.waitFor({ types: ['click'] }, 50);
     assert.equal(got, null);
+  });
+
+  describe('actor values', () => {
+    test('the actor set is user, agent and the reserved replay', () => {
+      assert.deepEqual([...ACTOR_VALUES], ['user', 'agent', 'replay']);
+      assert.ok(Object.isFrozen(ACTOR_VALUES));
+    });
+
+    test('filtering on the reserved actor is a valid, empty query', () => {
+      push({ actor: 'user' });
+      push({ actor: 'agent' });
+      assert.deepEqual(store.query({ actor: 'replay' }), []);
+      assert.equal(store.query({ actor: 'all' }).length, 2);
+    });
+
+    test('waitFor on the reserved actor never wakes on live events', async () => {
+      const pending = store.waitFor({ actor: 'replay' }, 60);
+      setTimeout(() => {
+        store.append(makeEvent({ seq: 1, actor: 'user' }));
+        store.append(makeEvent({ seq: 2, actor: 'agent' }));
+      }, 10);
+      assert.equal(await pending, null);
+    });
   });
 
   describe('restart continuity', () => {

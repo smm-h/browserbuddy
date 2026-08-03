@@ -36,6 +36,22 @@ export const KNOWN_EVENT_TYPES = new Set([
 ]);
 
 /**
+ * Every value an event's `actor` may take, and the only place the set is
+ * enumerated. docs/PROTOCOL.md §6 is its normative counterpart.
+ *
+ * `replay` is **reserved** for deterministic playback of a recorded
+ * demonstration and nothing emits it yet: a replayed step is neither the user
+ * acting nor the agent acting, and collapsing it into either would corrupt
+ * `browser_wait_for_user` (the replayer would wake itself) and poison the next
+ * recording. The name is claimed now so nothing else can take it and so
+ * `browser_observe {actor: "replay"}` is already a valid, empty query.
+ *
+ * Note this is the set of values an *event* carries; the observation tools
+ * additionally accept the pseudo-value `all`, which is a filter, not an actor.
+ */
+export const ACTOR_VALUES = Object.freeze(['user', 'agent', 'replay']);
+
+/**
  * In-memory ring buffer of the most recent events plus an append-only JSONL
  * log on disk (one file per UTC day).
  *
@@ -87,6 +103,7 @@ export class EventStore {
     return event;
   }
 
+  /** `actor` is one of ACTOR_VALUES, or `all`/undefined to disable the filter. */
   query({ sinceSeq, types, actor, limit } = {}) {
     let matches = this.buffer;
     if (typeof sinceSeq === 'number') {
@@ -108,7 +125,9 @@ export class EventStore {
 
   /**
    * Resolves with the first event arriving AFTER this call that matches the
-   * filter, or null when timeoutMs elapses first.
+   * filter, or null when timeoutMs elapses first. `actor` takes the same values
+   * as query()'s; it defaults to `user` because the only caller,
+   * browser_wait_for_user, must never wake on the agent's own actions.
    */
   waitFor({ types, tabId, actor = 'user' } = {}, timeoutMs = 120000) {
     return new Promise((resolve) => {

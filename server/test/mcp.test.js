@@ -271,6 +271,21 @@ describe('MCP server integration', () => {
     assert.equal(known.unknown, undefined, 'known types carry no marker');
   });
 
+  test('browser_observe accepts the reserved "replay" actor and returns nothing', async () => {
+    // Reserved for future demonstration playback: the value must already be a
+    // valid query so nothing else claims the name and consumers can validate
+    // against the final set.
+    sendEvent({ type: 'click', data: { selector: '#a' } });
+    await drain();
+    const result = await call('browser_observe', { actor: 'replay' });
+    assert.notEqual(result.isError, true, 'replay must be an accepted actor');
+    assert.deepEqual(json(result).events, [], 'nothing emits replay in this version');
+  });
+
+  test('browser_observe rejects an actor outside the reserved set', async () => {
+    assert.equal((await call('browser_observe', { actor: 'daemon' })).isError, true);
+  });
+
   test('canonical event fields are not shadowed by keys inside data', async () => {
     sendEvent({ type: 'click', url: 'https://a.test/', data: { url: 'https://spoof.test/', type: 'spoofed', selector: '#s' } });
     await drain();

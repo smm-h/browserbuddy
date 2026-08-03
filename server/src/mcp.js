@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { ACTOR_VALUES } from './store.js';
 
 const tabId = z.number().describe('Browser tab id; defaults to the active tab when omitted.');
 
@@ -223,7 +224,12 @@ export function createMcpServer({ hub, store, demos }) {
         sinceSeq: z.number().optional().describe('Return only events with a seq greater than this.'),
         limit: z.number().int().min(1).max(200).default(30).describe('Maximum number of events to return, most recent kept.'),
         types: z.array(z.string()).optional().describe('Restrict to these event types.'),
-        actor: z.enum(['user', 'agent', 'all']).default('user').describe('Whose actions to return.')
+        // ACTOR_VALUES is the one enumeration of the actor set; "all" is a
+        // filter, not an actor, so it is added here rather than living there.
+        actor: z
+          .enum([...ACTOR_VALUES, 'all'])
+          .default('user')
+          .describe('Whose actions to return. "replay" is reserved for future demonstration playback and matches nothing today.')
       }
     },
     async ({ sinceSeq, limit, types, actor }) => {
