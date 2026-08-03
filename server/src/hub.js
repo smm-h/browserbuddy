@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { WebSocketServer } from 'ws';
+import { PendingRpcs } from './rpc-peer.js';
 
 export const SERVER_VERSION = '0.1.0';
 const DEFAULT_RPC_TIMEOUT_MS = 20000;
@@ -27,8 +28,7 @@ export class Hub extends EventEmitter {
     this.wss = null;
     this.socket = null;
     this.nextSeq = 1;
-    this.nextRpcId = 1;
-    this.pending = new Map();
+    this.pending = new PendingRpcs();
   }
 
   start() {
@@ -54,20 +54,13 @@ export class Hub extends EventEmitter {
     if (!this.isConnected()) {
       return Promise.reject(new Error(notConnectedMessage(this.port)));
     }
-    const id = this.nextRpcId++;
-    const socket = this.socket;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`Timed out after ${timeoutMs}ms waiting for the extension to complete "${method}".`));
-      }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
-      socket.send(JSON.stringify({ kind: 'rpc', id, method, params }));
-    });
+    const { id, promise } = this.pending.create(method, timeoutMs);
+    this.socket.send(JSON.stringify({ kind: 'rpc', id, method, params }));
+    return promise;
   }
 
   async close() {
-    this.#rejectAllPending('Server shutting down.');
+    this.pending.rejectAll('Server shutting down.');
     this.socket = null;
     if (this.wss) {
       const wss = this.wss;
@@ -79,21 +72,12 @@ export class Hub extends EventEmitter {
     }
   }
 
-  /** Settles (rejects) every in-flight rpc so no caller is left hanging. */
-  #rejectAllPending(message) {
-    for (const [id, entry] of this.pending) {
-      clearTimeout(entry.timer);
-      this.pending.delete(id);
-      entry.reject(new Error(message));
-    }
-  }
-
   #onConnection(ws) {
     ws.on('message', (raw) => this.#onMessage(ws, raw));
     ws.on('close', () => {
       if (this.socket === ws) {
         this.socket = null;
-        this.#rejectAllPending('Extension disconnected while the call was in flight.');
+        this.pending.rejectAll('Extension disconnected while the call was in flight.');
       }
     });
     ws.on('error', (err) => console.error('[browserbuddy] extension socket error:', err.message));
@@ -147,15 +131,8 @@ export class Hub extends EventEmitter {
       }
 
       case 'rpc_result': {
-        const entry = this.pending.get(msg.id);
-        if (!entry) {
-          console.error(`[browserbuddy] rpc_result for unknown id ${msg.id}`);
-          return;
-        }
-        this.pending.delete(msg.id);
-        clearTimeout(entry.timer);
-        if (msg.ok) entry.resolve(msg.result ?? {});
-        else entry.reject(new Error(msg.error || 'Extension reported an unspecified error.'));
+        const settled = this.pending.settle(msg.id, Boolean(msg.ok), msg.ok ? msg.result ?? {} : msg.error);
+        if (!settled) console.error(`[browserbuddy] rpc_result for unknown id ${msg.id}`);
         break;
       }
 
