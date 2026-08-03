@@ -49,11 +49,11 @@
   "project_id": "browserbuddy",
   "name": "browserbuddy",
   "version": "0.1.0",
-  "help": "Share one browser between you and your coding agent: an MCP stdio server plus the WebSocket hub the BrowserBuddy extension connects to.",
+  "help": "Share one browser between you and your coding agent. install-host sets up the native-messaging host the extension spawns by default; serve runs the MCP stdio server with the WebSocket hub for builds that use the WebSocket carrier instead.",
   "commands": {
     "serve": {
       "name": "serve",
-      "help": "Run the MCP stdio server and the WebSocket hub the browser extension connects to.",
+      "help": "Run the MCP stdio server and the WebSocket hub. Only the WebSocket carrier uses this: with the extension's default native transport the browser spawns the host itself (see install-host).",
       "flags": [
         {
           "name": "port",

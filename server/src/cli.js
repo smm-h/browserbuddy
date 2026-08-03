@@ -69,12 +69,12 @@ export function createCli() {
   const app = createApp({
     name: 'browserbuddy',
     version: VERSION,
-    help: 'Share one browser between you and your coding agent: an MCP stdio server plus the WebSocket hub the BrowserBuddy extension connects to.'
+    help: 'Share one browser between you and your coding agent. install-host sets up the native-messaging host the extension spawns by default; serve runs the MCP stdio server with the WebSocket hub for builds that use the WebSocket carrier instead.'
   });
 
   app.command(
     defineCommand('serve', {
-      help: 'Run the MCP stdio server and the WebSocket hub the browser extension connects to.',
+      help: 'Run the MCP stdio server and the WebSocket hub. Only the WebSocket carrier uses this: with the extension\'s default native transport the browser spawns the host itself (see install-host).',
       flags: {
         port: flag('port', t.int, {
           help: 'WebSocket hub port on 127.0.0.1. Must match WS_URL in extension/background.js, which only applies when that file sets TRANSPORT to websocket.',
