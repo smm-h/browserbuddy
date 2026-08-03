@@ -127,7 +127,7 @@ Fields of the inner `event` object as sent by the extension:
 | --- | --- | --- | --- |
 | `ts` | integer | yes | Epoch milliseconds at which the extension observed the event. |
 | `actor` | string | yes | `"user"` or `"agent"`. See §6. |
-| `type` | string | yes | One of the event types in §4.3. |
+| `type` | string | yes | One of the event types in §4.3. A type the hub does not know is recorded, not rejected; see §4.3.1. |
 | `tabId` | integer \| null | yes | Browser tab id. `null` for window-level events with no associated tab. |
 | `url` | string \| null | yes | URL of the tab at the time of the event. `null` when unknown or not applicable. |
 | `data` | object | yes | Type-specific payload. May be empty (`{}`) but must be present. |
@@ -140,6 +140,7 @@ On receipt the hub adds two fields to the stored event:
 | --- | --- | --- |
 | `seq` | integer | Global sequence number, assigned by the hub. |
 | `receivedAt` | integer | Epoch milliseconds at which the hub received the event. |
+| `unknown` | `true` | Present **only** when the event's `type` is not in the host's known set (§4.3.1). Never `false`: its absence is the normal case. |
 
 Sequence semantics:
 
@@ -179,6 +180,18 @@ Events are never acknowledged. The hub sends nothing in response to an `event` m
 | `window_focus` | `focused` (boolean) | background (`windows.onFocusChanged`) | The browser window gained (`true`) or lost (`false`) focus. `tabId` and `url` are always `null`. `actor` is `"user"` unless the focus change falls inside the agent focus window opened by `activateTab` (see §6). |
 
 Events originating in a content script are sent with `tabId: null` and the page's `location.href`; the background script overwrites `tabId` from the message sender (and fills `url` from the sender tab if it was empty) before forwarding them to the hub.
+
+#### 4.3.1 Unknown event types
+
+The fourteen types above are the **complete known set** for this version, and the host holds exactly one copy of that list (`KNOWN_EVENT_TYPES` in `server/src/store.js`). An extension may be newer than the host it is talking to, so a type outside the set is a normal condition with a defined outcome:
+
+- The event is **stored whole**, `data` untouched. It is never dropped and never an error.
+- The host adds `unknown: true` to the stored event, in the ring buffer and in the JSONL line alike.
+- `browser_observe` renders that marker, so the agent can see that something happened which this host cannot interpret. Absence must be observable: a newer extension's new event type shows up as an unreadable event, not as silence.
+- The host logs the unrecognised type to stderr **once per type per run**, not once per event.
+- `unknown` is the only field the host adds on this path. It does not rewrite `type`, substitute a fallback type, or route the event anywhere different.
+
+Filters treat an unknown type like any other: `browser_observe` with `types: ["holographic_gesture"]` returns matching unknown events, and demonstration recording (which captures a fixed subset of known types) ignores them.
 
 ### 4.4 Debouncing and flushing
 
@@ -316,6 +329,9 @@ Rules:
 - Requests are correlated by `id` only. Responses may arrive out of order; the hub matches on `id` and must not assume FIFO.
 - The extension never initiates an RPC. The hub never sends an `rpc_result`.
 - Errors are reported as `ok:false` with a message, never as a thrown transport-level failure and never as a partially-successful `result`. There is no error code enumeration in v0.1.0; the string is the contract.
+- **An unimplemented `method` is a hard error, not silence.** The host may be newer than the extension, so it can ask for a method the extension does not have. The extension answers `ok:false` with `Unknown RPC method: <method>` (or `Unknown content RPC method: <method>` when the miss happens in the content script), naming the method exactly so the caller can tell "you asked for something I do not have" apart from "what you asked for failed". The request is never ignored, and the dispatch table is never consulted in a way that lets an inherited object key (`toString`, `constructor`) look like an implemented method.
+
+Symmetrically, a message whose `kind` the **hub** does not recognise is logged to stderr and ignored — it is not an error and it is not answered (§1.2). The asymmetry is deliberate: an unknown `kind` has no correlation id to fail, while an unknown `method` does and therefore must be failed.
 
 ### 8.2 Timeout and failure
 
@@ -398,7 +414,8 @@ The six page-interaction methods above require a content script in the target ta
 - Exactly one JSON object per WebSocket message, always with a `kind`.
 - Exactly one extension connection; a new `hello` supersedes the old, and only the adopted socket's frames are honoured.
 - `seq` is hub-assigned, dense, strictly increasing, per server run, ordered by arrival. The JSONL log rotates per UTC day, independently of server runs.
-- Every `rpc` gets exactly one `rpc_result` with the matching `id`, or fails: by timeout (20 seconds by default, overridable per call), on extension disconnect, or on server shutdown.
+- Every `rpc` gets exactly one `rpc_result` with the matching `id`, or fails: by timeout (20 seconds by default, overridable per call), on extension disconnect, or on server shutdown. A method the extension does not implement fails by name; it is never ignored.
+- An event type the host does not know is stored whole with `unknown: true` and surfaced by `browser_observe`. Nothing is dropped for being unrecognised.
 - On the native carrier the size limits are per direction (1 MB out of the host, 128 MB into it, 64 MB per result at the source), and an oversize result fails one call rather than the pipe.
 - On the native carrier the bearer token is stable across host respawns and the port is reclaimed whenever it is free, so a configured MCP endpoint keeps working; a descriptor whose `pid` is dead is no endpoint.
 - Redaction happens in the page, before transmission, for events, reads and demonstrations alike.

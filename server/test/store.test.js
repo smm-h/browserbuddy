@@ -2,7 +2,7 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { EventStore } from '../src/store.js';
+import { EventStore, KNOWN_EVENT_TYPES } from '../src/store.js';
 import { makeTmpDir, removeTmpDir, makeEvent } from './helpers.js';
 
 describe('EventStore', () => {
@@ -104,5 +104,52 @@ describe('EventStore', () => {
   test('waitFor resolves null on timeout', async () => {
     const got = await store.waitFor({ types: ['click'] }, 50);
     assert.equal(got, null);
+  });
+
+  describe('unknown event types', () => {
+    test('an unrecognised type is stored intact and marked unknown', () => {
+      const event = push({ type: 'quantum_entangled', data: { payload: 'keep me' } });
+      assert.equal(event.unknown, true);
+      const [stored] = store.query({});
+      assert.equal(stored.type, 'quantum_entangled');
+      assert.equal(stored.data.payload, 'keep me', 'the payload must survive intact');
+      assert.equal(stored.unknown, true);
+    });
+
+    test('the marker is written to the JSONL log too', () => {
+      const receivedAt = Date.parse('2026-03-09T10:00:00.000Z');
+      push({ receivedAt, type: 'not_a_real_type' });
+      const line = fs.readFileSync(path.join(dir, 'events', '2026-03-09.jsonl'), 'utf8').trim();
+      assert.equal(JSON.parse(line).unknown, true);
+    });
+
+    test('known types are not marked', () => {
+      for (const type of KNOWN_EVENT_TYPES) {
+        const event = push({ type });
+        assert.equal(event.unknown, undefined, `${type} must not be marked unknown`);
+      }
+    });
+
+    test('every type the extension can emit is known', () => {
+      // The protocol's event table and this set are the same list; drift here
+      // would mark real events as unknown.
+      const protocolTypes = [
+        'tab_created',
+        'tab_closed',
+        'tab_activated',
+        'navigation',
+        'page_loaded',
+        'click',
+        'input',
+        'form_submit',
+        'key_command',
+        'scroll',
+        'copy',
+        'paste',
+        'download_started',
+        'window_focus'
+      ];
+      assert.deepEqual([...KNOWN_EVENT_TYPES].sort(), protocolTypes.sort());
+    });
   });
 });

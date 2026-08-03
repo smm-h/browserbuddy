@@ -12,8 +12,7 @@ const BACKGROUND_SRC = path.join(REPO_ROOT, 'extension', 'background.js');
 /**
  * extension/transport-native.js is a plain script with no imports, so it runs
  * in a vm context with a stand-in for the browser API. That makes the transport
- * itself testable -- background.js is not (it binds extension APIs at the top
- * level), so the pieces that live there are asserted at the source.
+ * itself testable.
  *
  * The top-level `const` is lexical, not a property of the context's global, so
  * the loader publishes it explicitly.
@@ -23,6 +22,82 @@ function loadTransport(api) {
   const context = vm.createContext({ browser: api, console });
   vm.runInContext(code, context);
   return context.BBNativeTransport;
+}
+
+/** A listener registration point the background can attach to and we ignore. */
+function noopEvent() {
+  return { addListener() {} };
+}
+
+/** Every extension API background.js touches while loading and while dispatching. */
+function fakeBrowserApi(port) {
+  return {
+    runtime: {
+      connectNative: () => port,
+      lastError: null,
+      onMessage: noopEvent(),
+      onStartup: noopEvent(),
+      onInstalled: noopEvent()
+    },
+    tabs: {
+      onCreated: noopEvent(),
+      onRemoved: noopEvent(),
+      onActivated: noopEvent(),
+      query: () => Promise.resolve([{ id: 1, active: true }]),
+      get: () => Promise.resolve({ id: 1, url: null, title: null }),
+      sendMessage: () => Promise.resolve({ ok: true, result: {} })
+    },
+    webNavigation: { onCommitted: noopEvent(), onCompleted: noopEvent() },
+    downloads: { onCreated: noopEvent() },
+    windows: { onFocusChanged: noopEvent(), WINDOW_ID_NONE: -1 },
+    alarms: { create() {}, onAlarm: noopEvent() },
+    action: { setBadgeText() {}, setBadgeBackgroundColor() {}, setTitle() {} },
+    storage: { session: { get: () => Promise.resolve({}), set: () => Promise.resolve() } }
+  };
+}
+
+/**
+ * Loads transport-native.js and background.js into one vm context, exactly as
+ * the browser loads them into one global scope, and lets the boot sequence
+ * (restoreBuffer().then(connect)) settle. Returns the context, whose top-level
+ * function declarations are global properties.
+ *
+ * Timers are stubbed out: the keepalive interval background.js starts on
+ * connect would otherwise pin the host process's event loop open forever.
+ */
+async function loadBackground(port) {
+  const code = [
+    fs.readFileSync(TRANSPORT_SRC, 'utf8'),
+    fs.readFileSync(BACKGROUND_SRC, 'utf8'),
+    'globalThis.handleRpc = handleRpc;',
+    'globalThis.dispatchRpc = dispatchRpc;'
+  ].join('\n');
+  const context = vm.createContext({
+    browser: fakeBrowserApi(port),
+    console,
+    TextEncoder,
+    setTimeout: () => 0,
+    clearTimeout: () => {},
+    setInterval: () => 0,
+    clearInterval: () => {}
+  });
+  vm.runInContext(code, context);
+  await new Promise((resolve) => setImmediate(resolve));
+  return context;
+}
+
+/**
+ * Drives one rpc frame through the real handleRpc and returns its rpc_result.
+ * The frame is round-tripped through JSON because objects built inside the vm
+ * context carry that context's prototypes, which deepStrictEqual rejects --
+ * and JSON is exactly what the real pipe would carry anyway.
+ */
+async function callRpc(context, port, msg) {
+  const before = port.sent.length;
+  context.handleRpc(msg);
+  await new Promise((resolve) => setImmediate(resolve));
+  const frame = port.sent.slice(before).find((m) => m.kind === 'rpc_result');
+  return frame === undefined ? undefined : JSON.parse(JSON.stringify(frame));
 }
 
 function fakePort() {
@@ -125,6 +200,48 @@ describe('native transport disconnect diagnostics', () => {
     port.emitDisconnect();
     assert.equal(transport.send({ kind: 'ping' }), false);
     assert.deepEqual(port.sent, [{ kind: 'ping' }]);
+  });
+});
+
+describe('background rpc dispatch', () => {
+  let port;
+  let context;
+
+  beforeEach(async () => {
+    port = fakePort();
+    context = await loadBackground(port);
+  });
+
+  test('the extension announces itself once the pipe is up', () => {
+    const hellos = port.sent.filter((m) => m.kind === 'hello').map((m) => JSON.parse(JSON.stringify(m)));
+    assert.deepEqual(hellos, [
+      { kind: 'hello', role: 'extension', version: '0.1.0', transport: 'native-messaging' }
+    ]);
+  });
+
+  test('an unimplemented method is a hard error naming the method', async () => {
+    const result = await callRpc(context, port, { kind: 'rpc', id: 42, method: 'frobnicate', params: {} });
+    assert.deepEqual(result, {
+      kind: 'rpc_result',
+      id: 42,
+      ok: false,
+      error: 'Unknown RPC method: frobnicate'
+    });
+  });
+
+  test('an inherited Object key is an unknown method, not a relay to the content script', async () => {
+    // A lookup table built as an object literal would answer true for these and
+    // send them to the page, producing a confusing content-script error.
+    for (const method of ['toString', 'constructor', 'hasOwnProperty']) {
+      const result = await callRpc(context, port, { kind: 'rpc', id: 1, method, params: {} });
+      assert.equal(result.ok, false, `${method} must not be dispatched`);
+      assert.equal(result.error, `Unknown RPC method: ${method}`);
+    }
+  });
+
+  test('an implemented method still dispatches', async () => {
+    const result = await callRpc(context, port, { kind: 'rpc', id: 9, method: 'getPageState', params: {} });
+    assert.equal(result.ok, true);
   });
 });
 

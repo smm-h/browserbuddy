@@ -460,26 +460,18 @@ function resolveTabId(params) {
     });
 }
 
-const CONTENT_METHODS = {
-  readPage: true,
-  click: true,
-  fill: true,
-  scroll: true,
-  setClipboard: true,
-  getPageState: true
-};
+// Sets, not object literals: a plain object would answer true for inherited
+// keys, so an rpc named "toString" or "constructor" would be relayed to the
+// content script instead of failing as the unknown method it is.
+const CONTENT_METHODS = new Set(['readPage', 'click', 'fill', 'scroll', 'setClipboard', 'getPageState']);
 
 // Content-relayed RPCs that can affect the page (and so trigger navigation), so
 // the tab must be marked before relaying. Only consulted by relayToContent();
 // every background-handled method marks the tab in its own handler.
-const CONTENT_TAB_AFFECTING = {
-  click: true,
-  fill: true,
-  scroll: true
-};
+const CONTENT_TAB_AFFECTING = new Set(['click', 'fill', 'scroll']);
 
 function dispatchRpc(method, params) {
-  if (CONTENT_METHODS[method]) {
+  if (CONTENT_METHODS.has(method)) {
     return relayToContent(method, params);
   }
   switch (method) {
@@ -508,13 +500,15 @@ function dispatchRpc(method, params) {
     case 'runJs':
       return rpcRunJs(params);
     default:
+      // Hard error naming the method exactly: a host that is newer than this
+      // extension must learn that the method is missing, not get silence.
       throw new Error('Unknown RPC method: ' + method);
   }
 }
 
 function relayToContent(method, params) {
   return resolveTabId(params).then(function (tabId) {
-    if (CONTENT_TAB_AFFECTING[method]) markAgentTab(tabId);
+    if (CONTENT_TAB_AFFECTING.has(method)) markAgentTab(tabId);
     return ext.tabs
       .sendMessage(tabId, { bb: 'rpc', method: method, params: params }, { frameId: 0 })
       .catch(function (err) {

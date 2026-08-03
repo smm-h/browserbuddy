@@ -255,6 +255,22 @@ describe('MCP server integration', () => {
     assert.deepEqual(since.events.map((e) => e.seq), [2]);
   });
 
+  test('an event of an unknown type reaches browser_observe with its unknown marker', async () => {
+    // A newer extension emitting a type this host has never heard of must be
+    // visible to the agent, not silently swallowed.
+    sendEvent({ type: 'holographic_gesture', data: { hand: 'left' } });
+    await drain();
+    const [event] = json(await call('browser_observe', { limit: 1 })).events;
+    assert.equal(event.type, 'holographic_gesture');
+    assert.equal(event.unknown, true);
+    assert.equal(event.hand, 'left', 'the payload must survive intact');
+
+    sendEvent({ type: 'click', data: { selector: '#known' } });
+    await drain();
+    const [known] = json(await call('browser_observe', { limit: 1 })).events;
+    assert.equal(known.unknown, undefined, 'known types carry no marker');
+  });
+
   test('canonical event fields are not shadowed by keys inside data', async () => {
     sendEvent({ type: 'click', url: 'https://a.test/', data: { url: 'https://spoof.test/', type: 'spoofed', selector: '#s' } });
     await drain();

@@ -12,9 +12,20 @@ function jsonResult(value) {
 
 /** Flattens an event's data into the top level for compact agent-facing output. */
 function renderEvent(event) {
-  const { seq, ts, actor, type, tabId: tab, url, data } = event;
+  const { seq, ts, actor, type, tabId: tab, url, data, unknown } = event;
   // Data first: the event's own canonical fields must win over same-named keys in data.
-  return { ...(data ?? {}), seq, ts, actor, type, tabId: tab ?? null, url: url ?? null };
+  return {
+    ...(data ?? {}),
+    seq,
+    ts,
+    actor,
+    type,
+    tabId: tab ?? null,
+    url: url ?? null,
+    // Only present when the host does not know this type; its absence is the
+    // normal case and must not add noise to every event.
+    ...(unknown ? { unknown: true } : {})
+  };
 }
 
 /**

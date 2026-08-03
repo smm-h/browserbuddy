@@ -4,6 +4,33 @@ import path from 'node:path';
 const RING_CAPACITY = 1000;
 
 /**
+ * The canonical set of event types this host knows about, and the only place
+ * the list exists. docs/PROTOCOL.md §4.3 is its normative counterpart.
+ *
+ * An event whose type is not in here is NOT dropped: it is stored with an
+ * `unknown: true` marker (see append). A newer extension emitting a type an
+ * older host has never heard of must be observable, not silently lost.
+ */
+export const KNOWN_EVENT_TYPES = new Set([
+  // Background script (browser-level).
+  'tab_created',
+  'tab_closed',
+  'tab_activated',
+  'navigation',
+  'page_loaded',
+  'download_started',
+  'window_focus',
+  // Content script (page-level).
+  'click',
+  'input',
+  'form_submit',
+  'key_command',
+  'scroll',
+  'copy',
+  'paste'
+]);
+
+/**
  * In-memory ring buffer of the most recent events plus an append-only JSONL
  * log on disk (one file per UTC day).
  */
@@ -17,9 +44,21 @@ export class EventStore {
     this.highestSeq = 0;
     this.waiters = new Set();
     this.ensuredDayFile = null;
+    this.warnedUnknownTypes = new Set();
   }
 
   append(event) {
+    // Record-with-a-marker, never drop: absence must be observable.
+    if (!KNOWN_EVENT_TYPES.has(event.type)) {
+      event.unknown = true;
+      if (!this.warnedUnknownTypes.has(event.type)) {
+        this.warnedUnknownTypes.add(event.type);
+        console.error(
+          `[browserbuddy] event type "${String(event.type)}" is not known to this host; ` +
+            'storing it intact with unknown:true. The extension is probably newer than the host.'
+        );
+      }
+    }
     this.buffer.push(event);
     if (this.buffer.length > this.capacity) {
       this.buffer.splice(0, this.buffer.length - this.capacity);
