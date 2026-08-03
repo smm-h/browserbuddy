@@ -41,9 +41,11 @@ export async function startNativeHost({ input, output, dataDir, token, port, onE
   const desiredPort = port ?? persisted?.port ?? 0;
 
   const channel = new NativeMessagingChannel({ input, output });
-  const hub = new NativeHub({ channel });
   const store = new EventStore({ dataDir });
   const demos = new DemoRecorder({ dataDir });
+  // Built before the hub: every teardown respawns this process while the MCP
+  // endpoint stays put, so the seq counter must resume rather than restart.
+  const hub = new NativeHub({ channel, startSeq: store.latestSeq() + 1 });
 
   hub.on('event', (event) => {
     store.append(event);

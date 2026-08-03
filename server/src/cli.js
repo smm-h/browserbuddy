@@ -27,7 +27,8 @@ export const VERSION = '0.1.0';
 export async function startServer({ port, dataDir }) {
   const store = new EventStore({ dataDir });
   const demos = new DemoRecorder({ dataDir });
-  const hub = new Hub({ port });
+  // The store is built first: it holds the persisted seq the hub resumes from.
+  const hub = new Hub({ port, startSeq: store.latestSeq() + 1 });
 
   hub.on('event', (event) => {
     store.append(event);

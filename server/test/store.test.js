@@ -106,6 +106,114 @@ describe('EventStore', () => {
     assert.equal(got, null);
   });
 
+  describe('restart continuity', () => {
+    /** A new store on the same data dir is exactly what a host respawn builds. */
+    const restart = () => new EventStore({ dataDir: dir });
+
+    const writeDay = (day, events) => {
+      fs.mkdirSync(path.join(dir, 'events'), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'events', `${day}.jsonl`),
+        events.map((e) => `${JSON.stringify(e)}\n`).join('')
+      );
+    };
+
+    test('seq continues where the previous run stopped', () => {
+      for (let i = 0; i < 5; i += 1) push();
+      assert.equal(store.latestSeq(), 5);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'seq.json'), 'utf8')).seq, 5);
+
+      const reborn = restart();
+      assert.equal(reborn.latestSeq(), 5, 'the counter resumes, it does not reset');
+      const next = reborn.append(makeEvent({ seq: reborn.latestSeq() + 1, type: 'click' }));
+      assert.equal(next.seq, 6);
+    });
+
+    test('the ring is repopulated with the previous run"s events', () => {
+      push({ type: 'navigation', url: 'https://a.test/' });
+      push({ type: 'click', data: { selector: '#go' } });
+
+      const reborn = restart();
+      assert.equal(reborn.eventCount(), 2);
+      assert.deepEqual(reborn.query({}).map((e) => [e.seq, e.type]), [[1, 'navigation'], [2, 'click']]);
+      // "Everything since I last looked" must still answer with real events.
+      assert.deepEqual(reborn.query({ sinceSeq: 1 }).map((e) => e.seq), [2]);
+    });
+
+    test('reload spans day files newest-first and keeps ascending seq order', () => {
+      const day = (d, seqs) =>
+        writeDay(
+          d,
+          seqs.map((seq) => makeEvent({ seq, receivedAt: Date.parse(`${d}T12:00:00.000Z`) }))
+        );
+      day('2026-03-07', [1, 2]);
+      day('2026-03-08', [3, 4]);
+      day('2026-03-09', [5, 6]);
+
+      const reborn = restart();
+      assert.deepEqual(reborn.query({}).map((e) => e.seq), [1, 2, 3, 4, 5, 6]);
+      assert.equal(reborn.latestSeq(), 6);
+    });
+
+    test('reload stops at the ring capacity, keeping the newest events', () => {
+      const small = new EventStore({ dataDir: dir, capacity: 3 });
+      for (let i = 1; i <= 5; i += 1) small.append(makeEvent({ seq: i }));
+
+      const reborn = new EventStore({ dataDir: dir, capacity: 3 });
+      assert.deepEqual(reborn.query({}).map((e) => e.seq), [3, 4, 5]);
+      assert.equal(reborn.latestSeq(), 5);
+    });
+
+    test('a corrupt seq.json falls back to the highest seq in the log', () => {
+      for (let i = 0; i < 4; i += 1) push();
+      fs.writeFileSync(path.join(dir, 'seq.json'), '{"seq": not-json');
+
+      const reborn = restart();
+      assert.equal(reborn.latestSeq(), 4, 'the log is the fallback, not a reset to 0');
+      assert.equal(reborn.eventCount(), 4);
+    });
+
+    test('a missing seq.json still does not restart the sequence at 1', () => {
+      for (let i = 0; i < 3; i += 1) push();
+      fs.rmSync(path.join(dir, 'seq.json'));
+
+      const reborn = restart();
+      assert.equal(reborn.latestSeq(), 3);
+    });
+
+    test('a truncated last JSONL line is skipped, not fatal', () => {
+      push();
+      push();
+      const file = path.join(dir, 'events', `${new Date().toISOString().slice(0, 10)}.jsonl`);
+      fs.appendFileSync(file, '{"seq":3,"type":"cli');
+
+      const reborn = restart();
+      assert.deepEqual(reborn.query({}).map((e) => e.seq), [1, 2]);
+      assert.equal(reborn.latestSeq(), 2);
+    });
+
+    test('a seq.json ahead of the log wins', () => {
+      // The log can be pruned or rotated away; the counter must never go back.
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'seq.json'), JSON.stringify({ seq: 900 }));
+      writeDay('2026-03-09', [makeEvent({ seq: 4 })]);
+
+      const reborn = restart();
+      assert.equal(reborn.latestSeq(), 900);
+    });
+
+    test('a fresh data dir starts at seq 0 with an empty ring', () => {
+      const freshDir = makeTmpDir('store-fresh');
+      try {
+        const fresh = new EventStore({ dataDir: freshDir });
+        assert.equal(fresh.latestSeq(), 0);
+        assert.equal(fresh.eventCount(), 0);
+      } finally {
+        removeTmpDir(freshDir);
+      }
+    });
+  });
+
   describe('unknown event types', () => {
     test('an unrecognised type is stored intact and marked unknown', () => {
       const event = push({ type: 'quantum_entangled', data: { payload: 'keep me' } });

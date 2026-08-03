@@ -218,7 +218,7 @@ export function createMcpServer({ hub, store, demos }) {
   server.registerTool(
     'browser_observe',
     {
-      description: 'Read recent browser activity (navigation, clicks, typing, scrolling, tabs). Pass the previous latestSeq as sinceSeq to get only what happened since your last look.',
+      description: 'Read recent browser activity (navigation, clicks, typing, scrolling, tabs). Pass the previous latestSeq as sinceSeq to get only what happened since your last look; sequence numbers survive server restarts, so a cursor stays valid. An event this server does not recognise is returned with unknown: true rather than dropped.',
       inputSchema: {
         sinceSeq: z.number().optional().describe('Return only events with a seq greater than this.'),
         limit: z.number().int().min(1).max(200).default(30).describe('Maximum number of events to return, most recent kept.'),

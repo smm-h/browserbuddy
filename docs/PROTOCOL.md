@@ -145,16 +145,30 @@ On receipt the hub adds two fields to the stored event:
 Sequence semantics:
 
 - `seq` is assigned by the hub, never by the extension. The extension has no say in ordering.
-- It is **strictly monotonically increasing** and dense (each event gets the previous value plus one) across all events of a single server run, regardless of tab, actor or type.
-- It is **per server run**. The counter starts fresh when the server process starts. It is not persisted and not stable across restarts. A client holding a `seq` from a previous run must not assume it refers to the same event; `browser_state` reports the current counter so an assistant can re-anchor.
+- It is **strictly monotonically increasing** and dense (each event gets the previous value plus one) across all events, regardless of tab, actor or type.
+- It is **stable across host restarts.** A value is never reused. This matters because the host is not long-lived: on the native carrier every background teardown kills and respawns it while the MCP endpoint stays the same, so a `sinceSeq` a client is holding must keep meaning the same thing across a respawn it never saw.
 - Ordering is by hub arrival, not by `ts`. `ts` comes from the browser and can be skewed or out of order relative to arrival; `seq` is the only ordering authority.
 - `seq` is what `browser_observe`'s `sinceSeq` parameter refers to: return events with `seq > sinceSeq`.
 
 Events are appended in stamped form, one JSON object per line, to a JSONL file under the data directory: `<dataDir>/events/YYYY-MM-DD.jsonl`, where the date is the **UTC day** of the event's `receivedAt`. The log therefore rotates once per UTC day, not once per server run: a restart on the same day appends to the same file, and a session spanning midnight UTC writes into two files. The directory is created on the first write and again whenever the day file rolls over; an unwritable log is fatal (the server prints the reason to stderr and exits).
 
-Each event is simultaneously pushed into an in-memory ring buffer of the 1000 most recent events. Reads that fit within the ring are served from memory; the MCP tools never read the JSONL files back.
+Each event is simultaneously pushed into an in-memory ring buffer of the 1000 most recent events. Reads are served from that ring.
 
-Note the asymmetry: `seq` restarts at 1 with every server run, while the day file persists across runs. A single day file can therefore contain repeated `seq` values from consecutive runs.
+#### Sequence and history across restarts
+
+Two pieces of state carry the counter and the history over a restart:
+
+- `<dataDir>/seq.json` holds the highest seq ever assigned: `{"seq":1234}`. It is rewritten on every append, to a temp file and renamed, so a reader never sees a half-written counter. On startup the host resumes at **persisted + 1**.
+- The JSONL log is **read back** at startup. The host walks the day files newest-first and refills the ring with the most recent 1000 events, oldest-first, stopping as soon as the ring is full — so `browser_observe`, `browser_state` and `sinceSeq` answer with the real events from before the restart, across a UTC day boundary if the newest file does not hold 1000 on its own. Once the host is running, the log is not read again.
+
+Recovery rules, all of them recoverable startup conditions reported on stderr rather than crashes:
+
+- A missing, short, or malformed `seq.json` falls back to the highest `seq` found in the log; the host does **not** restart the counter at 1 while events exist.
+- A truncated or unparseable JSONL line (what a killed process leaves behind) is skipped, and the count of skipped lines is reported. The rest of the file is still loaded.
+- A `seq.json` ahead of the log wins. Pruning or rotating the log away must not move the counter backwards.
+- Only a genuinely empty data directory starts at `seq` 1 with an empty ring.
+
+A single day file can therefore be written by several consecutive host runs, and the `seq` values in it stay strictly increasing across those runs.
 
 Events are never acknowledged. The hub sends nothing in response to an `event` message.
 
@@ -413,7 +427,7 @@ The six page-interaction methods above require a content script in the target ta
 
 - Exactly one JSON object per WebSocket message, always with a `kind`.
 - Exactly one extension connection; a new `hello` supersedes the old, and only the adopted socket's frames are honoured.
-- `seq` is hub-assigned, dense, strictly increasing, per server run, ordered by arrival. The JSONL log rotates per UTC day, independently of server runs.
+- `seq` is hub-assigned, dense, strictly increasing, ordered by arrival, and never reused — including across host restarts, which the ring buffer also survives by reloading the log. The JSONL log rotates per UTC day, independently of server runs.
 - Every `rpc` gets exactly one `rpc_result` with the matching `id`, or fails: by timeout (20 seconds by default, overridable per call), on extension disconnect, or on server shutdown. A method the extension does not implement fails by name; it is never ignored.
 - An event type the host does not know is stored whole with `unknown: true` and surfaced by `browser_observe`. Nothing is dropped for being unrecognised.
 - On the native carrier the size limits are per direction (1 MB out of the host, 128 MB into it, 64 MB per result at the source), and an oversize result fails one call rather than the pipe.

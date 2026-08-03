@@ -3,6 +3,11 @@ import path from 'node:path';
 
 const RING_CAPACITY = 1000;
 
+/** Holds the highest seq ever assigned, so a restart resumes instead of restarting. */
+const SEQ_FILENAME = 'seq.json';
+
+const DAY_FILE_RE = /^(\d{4}-\d{2}-\d{2})\.jsonl$/;
+
 /**
  * The canonical set of event types this host knows about, and the only place
  * the list exists. docs/PROTOCOL.md §4.3 is its normative counterpart.
@@ -33,18 +38,28 @@ export const KNOWN_EVENT_TYPES = new Set([
 /**
  * In-memory ring buffer of the most recent events plus an append-only JSONL
  * log on disk (one file per UTC day).
+ *
+ * Both survive a restart. The browser tears its background context down
+ * routinely and every teardown respawns the host, while the MCP endpoint stays
+ * the same -- so a client's `sinceSeq` must keep meaning what it meant, and
+ * "everything since I last looked" must still return the events themselves.
+ * On construction the store therefore resumes its counter past the highest seq
+ * it ever assigned and refills the ring from the JSONL log.
  */
 export class EventStore {
   constructor({ dataDir, capacity = RING_CAPACITY } = {}) {
     if (!dataDir) throw new Error('EventStore requires a dataDir');
     this.dataDir = dataDir;
     this.eventsDir = path.join(dataDir, 'events');
+    this.seqFile = path.join(dataDir, SEQ_FILENAME);
     this.capacity = capacity;
     this.buffer = [];
     this.highestSeq = 0;
     this.waiters = new Set();
     this.ensuredDayFile = null;
+    this.ensuredDataDir = false;
     this.warnedUnknownTypes = new Set();
+    this.#restore();
   }
 
   append(event) {
@@ -65,6 +80,7 @@ export class EventStore {
     }
     if (typeof event.seq === 'number' && event.seq > this.highestSeq) {
       this.highestSeq = event.seq;
+      this.#writeSeq();
     }
     this.#writeLine(event);
     this.#notifyWaiters(event);
@@ -117,6 +133,144 @@ export class EventStore {
 
   latestSeq() {
     return this.highestSeq;
+  }
+
+  /**
+   * Rebuilds the counter and the ring from disk. Every failure mode here is a
+   * recoverable startup condition, reported on stderr -- a corrupt seq file or
+   * a half-written last line must not stop the host from starting. What it must
+   * never do is quietly restart the counter at 1 while events exist: that would
+   * hand out seq values a client has already seen.
+   */
+  #restore() {
+    const persistedSeq = this.#readSeq();
+    const { events, maxSeq } = this.#readRecentEvents();
+    this.buffer = events;
+    this.highestSeq = Math.max(persistedSeq, maxSeq);
+    if (persistedSeq === 0 && maxSeq > 0) {
+      console.error(
+        `[browserbuddy] ${SEQ_FILENAME} was missing or unusable; resuming the event sequence from ` +
+          `${maxSeq}, the highest seq found in the event log.`
+      );
+    }
+    if (this.buffer.length > 0) {
+      console.error(
+        `[browserbuddy] reloaded ${this.buffer.length} event(s) from the log; ` +
+          `the sequence continues at ${this.highestSeq + 1}.`
+      );
+    }
+  }
+
+  /** The persisted highest-assigned seq, or 0 when there is nothing usable. */
+  #readSeq() {
+    let raw;
+    try {
+      raw = fs.readFileSync(this.seqFile, 'utf8');
+    } catch (err) {
+      // A fresh data directory is the normal case, not a problem worth naming.
+      if (err.code !== 'ENOENT') {
+        console.error(`[browserbuddy] cannot read ${this.seqFile}: ${err.message}`);
+      }
+      return 0;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      const seq = parsed?.seq;
+      if (!Number.isInteger(seq) || seq < 0) throw new Error(`"seq" is not a non-negative integer: ${String(seq)}`);
+      return seq;
+    } catch (err) {
+      console.error(`[browserbuddy] ${this.seqFile} is corrupt (${err.message}); falling back to the event log.`);
+      return 0;
+    }
+  }
+
+  #writeSeq() {
+    try {
+      if (!this.ensuredDataDir) {
+        fs.mkdirSync(this.dataDir, { recursive: true });
+        this.ensuredDataDir = true;
+      }
+      // Temp file plus rename: a reader (or the next launch) never sees a
+      // half-written counter, which is the one way this file could lie.
+      const tmp = `${this.seqFile}.tmp`;
+      fs.writeFileSync(tmp, `${JSON.stringify({ seq: this.highestSeq })}\n`);
+      fs.renameSync(tmp, this.seqFile);
+    } catch (err) {
+      console.error(
+        `[browserbuddy] fatal: cannot persist the event sequence to ${this.seqFile}: ${err.message}. ` +
+          'Continuing would hand out seq values a client has already seen after the next restart.'
+      );
+      process.exit(1);
+    }
+  }
+
+  /**
+   * The newest `capacity` events across day files, oldest first, plus the
+   * highest seq seen while reading. Files are read newest-first and reading
+   * stops as soon as the ring is full, so a long history costs one file read.
+   */
+  #readRecentEvents() {
+    let days;
+    try {
+      days = fs
+        .readdirSync(this.eventsDir)
+        .filter((name) => DAY_FILE_RE.test(name))
+        .sort()
+        .reverse();
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.error(`[browserbuddy] cannot list ${this.eventsDir}: ${err.message}`);
+      }
+      return { events: [], maxSeq: 0 };
+    }
+
+    const chunks = [];
+    let collected = 0;
+    let maxSeq = 0;
+    for (const day of days) {
+      const file = path.join(this.eventsDir, day);
+      let text;
+      try {
+        text = fs.readFileSync(file, 'utf8');
+      } catch (err) {
+        console.error(`[browserbuddy] cannot read ${file}: ${err.message}; skipping it.`);
+        continue;
+      }
+      const parsed = [];
+      let damaged = 0;
+      for (const line of text.split('\n')) {
+        if (line.trim() === '') continue;
+        let event;
+        try {
+          event = JSON.parse(line);
+        } catch {
+          // A truncated last line is what a killed process leaves behind.
+          damaged += 1;
+          continue;
+        }
+        if (!event || typeof event !== 'object') {
+          damaged += 1;
+          continue;
+        }
+        if (typeof event.seq === 'number' && event.seq > maxSeq) maxSeq = event.seq;
+        parsed.push(event);
+      }
+      if (damaged > 0) {
+        console.error(`[browserbuddy] skipped ${damaged} unreadable line(s) in ${file}.`);
+      }
+      // Whole-file scan for maxSeq above, newest slice for the ring here.
+      const take = parsed.slice(Math.max(0, parsed.length - (this.capacity - collected)));
+      chunks.push(take);
+      collected += take.length;
+      if (collected >= this.capacity) break;
+    }
+
+    chunks.reverse();
+    const events = chunks.flat();
+    // Ascending seq is what query()/sinceSeq assume; the log is already in
+    // arrival order, but a day boundary or a truncated line must not skew it.
+    events.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+    return { events, maxSeq };
   }
 
   #notifyWaiters(event) {

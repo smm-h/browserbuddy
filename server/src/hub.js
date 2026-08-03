@@ -19,7 +19,16 @@ export function notConnectedMessage(port) {
  * seq-stamped incoming event and exposes rpc() for calls into the browser.
  */
 export class Hub extends EventEmitter {
-  constructor({ port = 8590, host = '127.0.0.1', path = '/ws', rpcTimeoutMs = DEFAULT_RPC_TIMEOUT_MS } = {}) {
+  constructor({
+    port = 8590,
+    host = '127.0.0.1',
+    path = '/ws',
+    rpcTimeoutMs = DEFAULT_RPC_TIMEOUT_MS,
+    // Where the seq counter picks up. The store knows the highest seq ever
+    // assigned, so passing store.latestSeq() + 1 keeps seq monotonic across
+    // restarts; the default is only for a hub with no store behind it.
+    startSeq = 1
+  } = {}) {
     super();
     this.port = port;
     this.host = host;
@@ -27,7 +36,7 @@ export class Hub extends EventEmitter {
     this.rpcTimeoutMs = rpcTimeoutMs;
     this.wss = null;
     this.socket = null;
-    this.nextSeq = 1;
+    this.nextSeq = startSeq;
     this.pending = new PendingRpcs();
   }
 

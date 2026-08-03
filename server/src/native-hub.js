@@ -22,11 +22,12 @@ export function notConnectedMessage() {
  * mcp.js consumes either transport unchanged.
  */
 export class NativeHub extends EventEmitter {
-  constructor({ channel, rpcTimeoutMs = DEFAULT_RPC_TIMEOUT_MS }) {
+  constructor({ channel, rpcTimeoutMs = DEFAULT_RPC_TIMEOUT_MS, startSeq = 1 }) {
     super();
     this.channel = channel;
     this.rpcTimeoutMs = rpcTimeoutMs;
-    this.nextSeq = 1;
+    // See Hub: the store owns the persisted counter, the hub only stamps.
+    this.nextSeq = startSeq;
     this.pending = new PendingRpcs();
     this.helloed = false;
     this.extensionVersion = null;

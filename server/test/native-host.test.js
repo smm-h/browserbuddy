@@ -250,6 +250,44 @@ describe('native host end to end', () => {
     assert.equal(second.url, first.url);
   });
 
+  test('a respawned host resumes the sequence and still has the history', async () => {
+    // The endpoint survives a respawn, so seq and the event log must too:
+    // otherwise a client's sinceSeq would silently start returning events it
+    // has already seen, and "everything since I last looked" would be empty.
+    const first = await bootHost();
+    browser.sendEvent({ ts: Date.now(), actor: 'user', type: 'navigation', tabId: 1, url: 'https://a.test/', data: {} });
+    browser.sendEvent({ ts: Date.now(), actor: 'user', type: 'click', tabId: 1, url: 'https://a.test/', data: { selector: '#go' } });
+
+    const before = await connectClient(first);
+    try {
+      const state = JSON.parse((await before.client.callTool({ name: 'browser_state', arguments: {} })).content[0].text);
+      assert.equal(state.latestSeq, 2);
+    } finally {
+      await before.transport.close();
+    }
+
+    browser.closePipe();
+    await browser.waitForExit();
+    const second = await bootHost();
+
+    const after = await connectClient(second);
+    try {
+      const observed = JSON.parse(
+        (await after.client.callTool({ name: 'browser_observe', arguments: { sinceSeq: 1 } })).content[0].text
+      );
+      assert.deepEqual(observed.events.map((e) => [e.seq, e.type]), [[2, 'click']], 'history must survive the respawn');
+
+      browser.sendEvent({ ts: Date.now(), actor: 'user', type: 'scroll', tabId: 1, url: 'https://a.test/', data: {} });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const next = JSON.parse(
+        (await after.client.callTool({ name: 'browser_observe', arguments: { sinceSeq: 2 } })).content[0].text
+      );
+      assert.deepEqual(next.events.map((e) => e.seq), [3], 'seq continues, it does not restart at 1');
+    } finally {
+      await after.transport.close();
+    }
+  });
+
   test('a taken port yields a new url, a loud message, and the same token', async () => {
     const first = await bootHost();
     const firstPort = Number(new URL(first.url).port);
