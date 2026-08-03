@@ -197,13 +197,38 @@ describe('MCP server integration', () => {
     }
   });
 
-  test('no file in src/ writes to stdout, which belongs to the MCP stdio transport', () => {
+  // stdout is never ours: under `serve` it carries the MCP stdio protocol, and
+  // under the native-messaging host it carries the browser's framed messages.
+  // Exactly one file may name it -- the host entry point, which hands fd 1 to
+  // the native-messaging channel and then points process.stdout at stderr so a
+  // stray write cannot desynchronise the frame stream.
+  const STDOUT_OWNER = 'native-host-bin.js';
+
+  test('no file in src/ uses console.log', () => {
     const offenders = [];
     for (const file of srcFiles(path.join(SERVER_ROOT, 'src'))) {
-      const text = fs.readFileSync(file, 'utf8');
-      if (text.includes('console.log(') || text.includes('process.stdout.write(')) offenders.push(file);
+      if (fs.readFileSync(file, 'utf8').includes('console.log(')) offenders.push(file);
     }
     assert.deepEqual(offenders, []);
+  });
+
+  test('only the native-messaging host entry point touches stdout', () => {
+    const offenders = [];
+    for (const file of srcFiles(path.join(SERVER_ROOT, 'src'))) {
+      if (path.basename(file) === STDOUT_OWNER) continue;
+      if (fs.readFileSync(file, 'utf8').includes('process.stdout')) offenders.push(file);
+    }
+    assert.deepEqual(offenders, []);
+  });
+
+  test('the host entry point redirects process.stdout to stderr before serving', () => {
+    const text = fs.readFileSync(path.join(SERVER_ROOT, 'src', STDOUT_OWNER), 'utf8');
+    assert.match(text, /process\.stdout\.write\s*=\s*\(/, 'process.stdout.write must be reassigned');
+    assert.match(text, /process\.stderr\.write\(chunk/, 'the reassignment must route to stderr');
+    assert.ok(
+      text.indexOf('process.stdout.write =') < text.indexOf('startNativeHost('),
+      'the redirect must happen before the host starts serving'
+    );
   });
 
   test('extension errors surface as tool errors', async () => {
