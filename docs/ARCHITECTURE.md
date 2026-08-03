@@ -166,6 +166,20 @@ Every operation has exactly one strategy. When it does not work, it fails loudly
 
 The unifying principle: the assistant is an autonomous consumer that will take whatever path is offered. Ambiguity, silent degradation and best-effort behaviour are all worse for it than a clear failure, because a clear failure it can reason about and report, while a silent degradation it will simply build on.
 
+## 9b. The browser-spawned native-messaging host
+
+§3 describes the v0.1.0 topology: one process that is both the MCP stdio server and the WebSocket hub, launched by the MCP client. The native-messaging carrier (PROTOCOL.md §1.1) inverts who starts what, and that inversion is the whole point.
+
+- **The browser starts the server.** `ext.runtime.connectNative()` makes the browser fork the host process and hold its stdio. Nothing has to be installed as a daemon, nothing has to be running before the browser is, and the host's lifetime is exactly the extension's: when the pipe closes, the host exits and deletes its endpoint file.
+- **The host listens because the extension cannot.** An extension may not bind a socket; an ordinary OS process may. So the host — not the extension — is the MCP server, reachable over Streamable HTTP on loopback. The extension stays a pure client of a pipe the browser owns.
+- **The endpoint is discovered, not configured.** The port is ephemeral and the bearer token is generated per launch, so neither can be written into a static config. The host publishes both to `<data-dir>/mcp-endpoint.json`, and the MCP client reads them from there. This replaces the fixed 8590 and the compile-time hub URL in `background.js` — the reason §3 refuses to relocate the port does not apply when the *server* advertises itself.
+- **stdout changes owner, not strictness.** Under `serve`, file descriptor 1 is the MCP stdio channel; under the host, it is the native-messaging frame stream. Either way a single stray byte corrupts the session, so the constraint is unchanged in force and merely different in name. The host entry point hands fd 1 to the framing channel and then points the process-level stdout stream at stderr, so a stray log line lands in the browser's host log instead of desynchronising the frames. A test asserts that exactly one file under `server/src/` names stdout at all, and that it performs that redirect before serving.
+- **The trust boundary is the OS user.** Anything running as this user can read `mcp-endpoint.json` and therefore the token. That is accepted: the token exists to keep *other* local users and stray web pages out, and the file is mode `0600` with no CORS headers on the endpoint, so a page cannot reach it even with the token.
+
+### MV3 lifetime on this carrier
+
+The native port behaves like the WebSocket did on Chrome: traffic on it resets the service worker's idle timer, so the 20-second `ping` keeps the worker — and therefore the host — alive across long idle periods. Measured directly against Chromium 145 with a bare probe extension, a port with one message every 20 seconds and no other activity stayed up for the full length of the run without a single disconnect. The consequence is stronger than on the WebSocket carrier: worker teardown does not merely drop a socket that can be redialled, it kills the host process and its HTTP endpoint, so the MCP client's URL goes dead. The keepalive is therefore not an optimisation here — it is what keeps the endpoint addressable.
+
 ## 10. Trade-offs accepted in v0.1.0
 
 | Trade-off | Consequence | Why it is accepted |

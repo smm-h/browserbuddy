@@ -14,6 +14,21 @@ Two roles:
 
 ## 1. Transport
 
+The message layer below is carrier-independent: the same `kind`-tagged JSON objects, the same handshake, the same RPC correlation rules travel over either carrier. Which carrier a build uses is decided at load time by the `TRANSPORT` constant in `extension/background.js` and is never renegotiated at runtime. There is no cascade: a carrier that cannot connect reports a hard error and retries itself.
+
+### 1.1 Carrier A — native messaging (default)
+
+- The extension calls `ext.runtime.connectNative("com.browserbuddy.host")`. **The browser** spawns the host process and owns the stdio pipe between them; the extension binds nothing and the host is the only party that may listen.
+- Framing on that pipe is the browser's, not ours: each message is a 32-bit **little-endian** byte length followed by exactly that many bytes of UTF-8 JSON. The browser refuses messages above 1 MB in either direction; both sides treat an oversize message as a hard error rather than truncating.
+- The host's file descriptor 1 carries native-messaging frames and nothing else, ever. Every diagnostic goes to stderr, which the browser writes to its own host log.
+- When the pipe closes, the host exits. It never reconnects — the browser owns its lifetime.
+- The host serves the MCP surface over Streamable HTTP on `127.0.0.1` at an **ephemeral** port, path `/mcp`, protected by a bearer token generated fresh for each launch. Requests without a matching `Authorization: Bearer …` header get `401`; no CORS headers are emitted, so a web page cannot reach the endpoint.
+- The host writes `<data-dir>/mcp-endpoint.json` (mode `0600`, written to a temp file and renamed, so a reader never sees a partial file) with `url`, `token`, `pid` and a ready-to-paste `mcpServers` block. It removes the file on shutdown. A file whose `pid` is no longer alive is stale.
+- Host manifest locations: `<user-data-dir>/NativeMessagingHosts/com.browserbuddy.host.json` for Chrome/Chromium (it follows `--user-data-dir`, so a test profile can install its own), and `$HOME/.mozilla/native-messaging-hosts/com.browserbuddy.host.json` for Firefox (keyed on `HOME`, not on the profile). The Chrome manifest names the extension in `allowed_origins`, which requires a stable extension id — hence the `key` pinned in `extension/manifest.json`. The Firefox manifest names the gecko id in `allowed_extensions`.
+- On this carrier `hello` and `hello_ack` additionally carry `"transport": "native-messaging"`.
+
+### 1.2 Carrier B — WebSocket
+
 - WebSocket over plain HTTP, no TLS.
 - Default endpoint: `ws://127.0.0.1:8590/ws`. The port is set by the server's `--port` flag; the path is always `/ws`.
 - The listener binds to the loopback interface only. It is never reachable off the machine.
