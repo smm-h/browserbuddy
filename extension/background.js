@@ -44,6 +44,32 @@ const MAX_BUFFER = 500;
 const AGENT_TAG_WINDOW_MS = 1500;
 const BUFFER_KEY = 'bbBuffer';
 
+// Ceiling on a single RPC result travelling extension -> host. The browser
+// itself allows far more in this direction, but an unbounded result is still a
+// bad frame to emit: it would stall the pipe for seconds and pin memory on
+// both sides. Over the limit the RPC answers ok:false with the measured size,
+// which fails one call instead of tearing the pipe (and the host) down.
+const MAX_RPC_RESULT_BYTES = 64 * 1024 * 1024;
+
+function byteLength(text) {
+  return new TextEncoder().encode(text).length;
+}
+
+/** Throws the standard "too large" RPC error. `bytes` is the measured size. */
+function assertResultSize(what, bytes) {
+  if (bytes > MAX_RPC_RESULT_BYTES) {
+    throw new Error(
+      what +
+        ' result too large (' +
+        bytes +
+        ' bytes, limit ' +
+        Math.round(MAX_RPC_RESULT_BYTES / (1024 * 1024)) +
+        'MB). Return a smaller value: narrow the expression, or read the page ' +
+        'in pieces instead of serialising it all at once.'
+    );
+  }
+}
+
 let ws = null;
 let backoffIndex = 0;
 let reconnectTimer = null;
@@ -612,7 +638,10 @@ function rpcScreenshot(params) {
       if (typeof dataUrl !== 'string' || dataUrl.indexOf(prefix) !== 0) {
         throw new Error('captureVisibleTab returned an unexpected data URL format');
       }
-      return { format: 'jpeg', base64: dataUrl.slice(prefix.length) };
+      const base64 = dataUrl.slice(prefix.length);
+      // base64 is ASCII, so its length is its byte length.
+      assertResultSize('screenshot', base64.length);
+      return { format: 'jpeg', base64: base64 };
     });
 }
 
@@ -694,7 +723,16 @@ function rpcRunJs(params) {
         if (!frames || frames.length === 0) {
           throw new Error('runJs produced no result frame for tab ' + tabId);
         }
-        return { result: frames[0].result === undefined ? null : frames[0].result };
+        const value = frames[0].result === undefined ? null : frames[0].result;
+        // Measure what will actually go on the wire, before it goes there.
+        let serialized;
+        try {
+          serialized = JSON.stringify(value);
+        } catch (e) {
+          throw new Error('runJs produced a value that cannot be serialised: ' + errorMessage(e));
+        }
+        assertResultSize('runJs', byteLength(serialized === undefined ? 'null' : serialized));
+        return { result: value };
       });
   });
 }

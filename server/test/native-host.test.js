@@ -6,7 +6,12 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { makeTmpDir, removeTmpDir, SERVER_ROOT } from './helpers.js';
 import { FakeNativeBrowser } from './fake-native-extension.js';
-import { encodeMessage, MessageDecoder, MAX_MESSAGE_BYTES } from '../src/native-messaging.js';
+import {
+  encodeMessage,
+  MessageDecoder,
+  MAX_OUTBOUND_MESSAGE_BYTES,
+  MAX_INBOUND_MESSAGE_BYTES
+} from '../src/native-messaging.js';
 import { chromeExtensionIdFromKey, chromeHostManifest, firefoxHostManifest, HOST_NAME } from '../src/host-manifest.js';
 import { readEndpointFile, endpointPath } from '../src/endpoint-file.js';
 
@@ -50,13 +55,50 @@ describe('native-messaging framing', () => {
   });
 
   test('an oversize outgoing message is a hard error, not a truncation', () => {
-    assert.throws(() => encodeMessage({ big: 'x'.repeat(MAX_MESSAGE_BYTES) }), /native-messaging limit/);
+    assert.throws(
+      () => encodeMessage({ big: 'x'.repeat(MAX_OUTBOUND_MESSAGE_BYTES) }),
+      /native-messaging limit for this direction/
+    );
+  });
+
+  test('an oversize outgoing rpc names the method it was carrying', () => {
+    assert.throws(
+      () => encodeMessage({ kind: 'rpc', id: 1, method: 'runJs', params: { code: 'x'.repeat(MAX_OUTBOUND_MESSAGE_BYTES) } }),
+      /rpc "runJs" is \d+ bytes/
+    );
+  });
+
+  test('the inbound decoder accepts a frame far above the outbound cap', () => {
+    // Results (eval values, screenshot base64) travel extension -> host, where
+    // the browser allows up to 4 GB. Rejecting them in the decoder would close
+    // the channel and kill the host over one large result.
+    const big = { kind: 'rpc_result', id: 1, ok: true, result: { base64: 'A'.repeat(3 * 1024 * 1024) } };
+    const framed = encodeMessage(big, { maxBytes: MAX_INBOUND_MESSAGE_BYTES });
+    assert.ok(framed.length > MAX_OUTBOUND_MESSAGE_BYTES);
+    assert.deepEqual(new MessageDecoder().push(framed), [big]);
   });
 
   test('an oversize length header is a hard error, not a resync attempt', () => {
     const header = Buffer.alloc(4);
-    header.writeUInt32LE(MAX_MESSAGE_BYTES + 1, 0);
+    header.writeUInt32LE(MAX_INBOUND_MESSAGE_BYTES + 1, 0);
     assert.throws(() => new MessageDecoder().push(header), /stream is corrupt/);
+  });
+});
+
+describe('extension-side result bounding', () => {
+  // The extension is not loadable in node (it binds browser globals at the top
+  // level), so the guard is asserted at the source. It is what keeps an
+  // unreasonable result a single ok:false RPC instead of an oversize frame.
+  const background = fs.readFileSync(path.join(REPO_ROOT, 'extension', 'background.js'), 'utf8');
+
+  test('background.js caps a single rpc result at 64MB', () => {
+    assert.match(background, /const MAX_RPC_RESULT_BYTES = 64 \* 1024 \* 1024;/);
+    assert.match(background, /result too large \(/);
+  });
+
+  test('both large-result RPCs are measured before they are sent', () => {
+    assert.match(background, /assertResultSize\('screenshot',/);
+    assert.match(background, /assertResultSize\('runJs',/);
   });
 });
 
@@ -219,6 +261,48 @@ describe('native host end to end', () => {
       const res = await client.callTool({ name: 'browser_tabs', arguments: {} });
       assert.equal(res.isError, true);
       assert.match(res.content[0].text, /native-messaging pipe/);
+    } finally {
+      await transport.close();
+    }
+  });
+
+  test('a result far above 1 MB round-trips without killing the host', async () => {
+    const big = 'y'.repeat(2 * 1024 * 1024);
+    const endpoint = await bootHost({
+      runJs: () => ({ result: big }),
+      listTabs: () => ({ tabs: [] })
+    });
+    const { client, transport } = await connectClient(endpoint);
+    try {
+      const res = await client.callTool({ name: 'browser_eval', arguments: { code: '1' } });
+      const payload = JSON.parse(res.content.find((c) => c.type === 'text').text);
+      assert.equal(payload.result.length, big.length);
+      // The pipe and the endpoint survived: the next call still works.
+      const after = await client.callTool({ name: 'browser_tabs', arguments: {} });
+      assert.equal(after.isError, undefined);
+      assert.equal(browser.child.exitCode, null, 'the host must still be running');
+    } finally {
+      await transport.close();
+    }
+  });
+
+  test('an over-limit result fails one call and leaves the endpoint alive', async () => {
+    // What the extension does when its own 64MB guard trips: one ok:false RPC,
+    // no oversize frame, no pipe teardown.
+    const endpoint = await bootHost({
+      runJs: () => {
+        throw new Error('runJs result too large (70000000 bytes, limit 64MB).');
+      },
+      listTabs: () => ({ tabs: [] })
+    });
+    const { client, transport } = await connectClient(endpoint);
+    try {
+      const res = await client.callTool({ name: 'browser_eval', arguments: { code: '1' } });
+      assert.equal(res.isError, true);
+      assert.match(res.content[0].text, /result too large \(70000000 bytes, limit 64MB\)/);
+      const after = await client.callTool({ name: 'browser_tabs', arguments: {} });
+      assert.equal(after.isError, undefined);
+      assert.equal(browser.child.exitCode, null, 'the host must still be running');
     } finally {
       await transport.close();
     }

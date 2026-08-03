@@ -4,23 +4,43 @@ import { EventEmitter } from 'node:events';
  * Chrome/Firefox native-messaging wire framing: every message is a 32-bit
  * little-endian byte length followed by that many bytes of UTF-8 JSON.
  *
- * The browser refuses to deliver a message larger than 1 MB to the host, and
- * refuses to accept one larger than 1 MB back (Chrome's host->browser limit is
- * documented as 1 MB too; Firefox's is the same). Both directions are checked
- * here so an oversize payload fails loudly on our side with a message naming
- * the size, instead of the browser silently killing the pipe.
+ * The two directions have different limits, and conflating them is a defect:
+ *
+ *  - host -> browser is capped by the browser at 1 MB. Everything we send is a
+ *    command (`rpc`, `hello_ack`, `pong`), all of them tiny, so the cap is
+ *    enforced on our writer with a little headroom: an oversize command is a
+ *    hard error naming the method, never a truncation and never a frame the
+ *    browser would answer by killing the pipe.
+ *  - browser -> host may be up to 4 GB. Results travel this way, and a
+ *    `browser_eval` value or a `browser_screenshot` base64 blob legitimately
+ *    exceeds 1 MB. Applying the outbound cap to the decoder would throw inside
+ *    the decoder, close the channel and take the whole host (and its MCP
+ *    endpoint) down over one large result. The inbound bound is therefore
+ *    generous and exists only to catch a desynchronised stream.
+ *
+ * The extension additionally bounds each individual result before it emits it
+ * (see MAX_RPC_RESULT_BYTES in extension/background.js), so an unreasonable
+ * payload fails as one `ok:false` RPC instead of as an oversize frame.
  */
-export const MAX_MESSAGE_BYTES = 1024 * 1024;
+export const MAX_OUTBOUND_MESSAGE_BYTES = 1024 * 1024 - 1024;
+
+/** Inbound bound: a length header above this means the stream is corrupt. */
+export const MAX_INBOUND_MESSAGE_BYTES = 128 * 1024 * 1024;
 
 const HEADER_BYTES = 4;
 
-/** Encodes one native message. Throws when the payload exceeds the 1 MB cap. */
-export function encodeMessage(value) {
+/**
+ * Encodes one native message. Throws when the payload exceeds `maxBytes`
+ * (the host->browser cap by default; the browser->host direction passes the
+ * inbound bound instead).
+ */
+export function encodeMessage(value, { maxBytes = MAX_OUTBOUND_MESSAGE_BYTES } = {}) {
   const body = Buffer.from(JSON.stringify(value), 'utf8');
-  if (body.length > MAX_MESSAGE_BYTES) {
+  if (body.length > maxBytes) {
+    const what = value && value.kind === 'rpc' && value.method ? `rpc "${value.method}"` : 'Native message';
     throw new Error(
-      `Native message is ${body.length} bytes, over the ${MAX_MESSAGE_BYTES}-byte native-messaging limit. ` +
-        'The browser would drop the connection; split or shrink the payload instead.'
+      `${what} is ${body.length} bytes, over the ${maxBytes}-byte native-messaging limit for this direction. ` +
+        'The browser would drop the connection; shrink the payload instead.'
     );
   }
   const header = Buffer.allocUnsafe(HEADER_BYTES);
@@ -33,7 +53,7 @@ export function encodeMessage(value) {
  * it yields whole messages as they complete.
  */
 export class MessageDecoder {
-  constructor({ maxMessageBytes = MAX_MESSAGE_BYTES } = {}) {
+  constructor({ maxMessageBytes = MAX_INBOUND_MESSAGE_BYTES } = {}) {
     this.maxMessageBytes = maxMessageBytes;
     this.buffer = Buffer.alloc(0);
   }

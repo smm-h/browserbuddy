@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { MessageDecoder, encodeMessage } from '../src/native-messaging.js';
+import { MessageDecoder, encodeMessage, MAX_INBOUND_MESSAGE_BYTES } from '../src/native-messaging.js';
 import { SERVER_ROOT } from './helpers.js';
 
 const HOST_BIN = path.join(SERVER_ROOT, 'src', 'native-host-bin.js');
@@ -41,7 +41,9 @@ export class FakeNativeBrowser {
   }
 
   send(msg) {
-    this.child.stdin.write(encodeMessage(msg));
+    // Browser -> host: the browser allows far more than the 1 MB it imposes on
+    // the other direction, so results the size of a screenshot are legal here.
+    this.child.stdin.write(encodeMessage(msg, { maxBytes: MAX_INBOUND_MESSAGE_BYTES }));
   }
 
   hello(version = '0.1.0') {
