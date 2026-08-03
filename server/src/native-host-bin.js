@@ -41,7 +41,9 @@ startNativeHost({
   input: process.stdin,
   output: nativeOut,
   dataDir,
-  port: portArg ? Number(portArg) : 0,
+  // No --http-port means "inherit the persisted endpoint identity", not 0:
+  // passing 0 here would discard the port the client is already talking to.
+  port: portArg ? Number(portArg) : undefined,
   onExit: () => process.exit(0)
 })
   .then((started) => {

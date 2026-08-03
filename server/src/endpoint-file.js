@@ -8,10 +8,63 @@ import path from 'node:path';
  */
 export const ENDPOINT_FILENAME = 'mcp-endpoint.json';
 
+/**
+ * Name of the file that carries the endpoint *identity* across host restarts.
+ * The browser respawns the host on every background teardown; without this the
+ * client's url and bearer token would silently change under it. The host reuses
+ * the recorded token always, and the recorded port when it is still bindable.
+ */
+export const ENDPOINT_STATE_FILENAME = 'endpoint-state.json';
+
 export const ENDPOINT_SCHEMA_VERSION = 1;
 
 export function endpointPath(dataDir) {
   return path.join(dataDir, ENDPOINT_FILENAME);
+}
+
+export function endpointStatePath(dataDir) {
+  return path.join(dataDir, ENDPOINT_STATE_FILENAME);
+}
+
+/**
+ * Reads the persisted endpoint identity, or null when there is none. It holds
+ * a bearer token, so it is written 0600 like the descriptor. A malformed file
+ * is a hard error: silently minting a new token would be exactly the
+ * client-invalidating churn this file exists to prevent.
+ */
+export function readEndpointState(dataDir) {
+  let raw;
+  try {
+    raw = fs.readFileSync(endpointStatePath(dataDir), 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+  const state = JSON.parse(raw);
+  if (typeof state.token !== 'string' || !Number.isInteger(state.port)) {
+    throw new Error(
+      `${endpointStatePath(dataDir)} is missing a string "token" or an integer "port". ` +
+        'Delete it to start a fresh endpoint identity.'
+    );
+  }
+  return { token: state.token, port: state.port };
+}
+
+/** Records the identity the next host launch should try to reuse. */
+export function writeEndpointState(dataDir, { token, port }) {
+  fs.mkdirSync(dataDir, { recursive: true });
+  const target = endpointStatePath(dataDir);
+  const payload = {
+    schemaVersion: ENDPOINT_SCHEMA_VERSION,
+    token,
+    port,
+    updatedAt: new Date().toISOString()
+  };
+  const tmp = `${target}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
+  fs.chmodSync(tmp, 0o600);
+  fs.renameSync(tmp, target);
+  return target;
 }
 
 /**

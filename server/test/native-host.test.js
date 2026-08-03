@@ -1,6 +1,7 @@
 import { test, describe, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
@@ -13,7 +14,12 @@ import {
   MAX_INBOUND_MESSAGE_BYTES
 } from '../src/native-messaging.js';
 import { chromeExtensionIdFromKey, chromeHostManifest, firefoxHostManifest, HOST_NAME } from '../src/host-manifest.js';
-import { readEndpointFile, endpointPath } from '../src/endpoint-file.js';
+import {
+  readEndpointFile,
+  endpointPath,
+  endpointStatePath,
+  readEndpointState
+} from '../src/endpoint-file.js';
 
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
 
@@ -180,6 +186,55 @@ describe('native host end to end', () => {
     const endpoint = await bootHost();
     const port = Number(new URL(endpoint.url).port);
     assert.ok(port > 0 && port !== 8590, `expected an ephemeral port, got ${port}`);
+  });
+
+  test('a respawned host reuses the same token and port', async () => {
+    // Every service-worker teardown respawns the host. If the token or the
+    // port changed, the MCP client's configured endpoint would silently die.
+    const first = await bootHost();
+    const firstPort = Number(new URL(first.url).port);
+    assert.equal(fs.statSync(endpointStatePath(dataDir)).mode & 0o777, 0o600);
+
+    browser.closePipe();
+    assert.equal(await browser.waitForExit(), 0);
+    assert.equal(fs.existsSync(endpointPath(dataDir)), false, 'the descriptor goes away with the host');
+    assert.ok(fs.existsSync(endpointStatePath(dataDir)), 'the identity outlives the host');
+
+    const second = await bootHost();
+    assert.equal(second.token, first.token, 'the bearer token must survive a respawn');
+    assert.equal(Number(new URL(second.url).port), firstPort, 'the port must be reclaimed when it is free');
+    assert.equal(second.url, first.url);
+  });
+
+  test('a taken port yields a new url, a loud message, and the same token', async () => {
+    const first = await bootHost();
+    const firstPort = Number(new URL(first.url).port);
+    browser.closePipe();
+    await browser.waitForExit();
+
+    const squatter = net.createServer();
+    await new Promise((resolve, reject) => {
+      squatter.once('error', reject);
+      squatter.listen(firstPort, '127.0.0.1', resolve);
+    });
+    try {
+      const second = await bootHost();
+      assert.equal(second.token, first.token, 'only the url may change, never the token');
+      assert.notEqual(Number(new URL(second.url).port), firstPort);
+      assert.ok(
+        browser.stderr.some((l) => l.includes(`previous MCP port ${firstPort} is held`)),
+        `expected a loud message about the taken port, saw:\n${browser.stderr.join('\n')}`
+      );
+    } finally {
+      await new Promise((resolve) => squatter.close(resolve));
+    }
+  });
+
+  test('the persisted identity records the port actually bound', async () => {
+    const endpoint = await bootHost();
+    const state = readEndpointState(dataDir);
+    assert.equal(state.token, endpoint.token);
+    assert.equal(state.port, Number(new URL(endpoint.url).port));
   });
 
   test('an MCP tool call round-trips over HTTP and the native pipe', async () => {
