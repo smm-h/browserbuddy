@@ -15,6 +15,7 @@ import {
   MAX_INBOUND_MESSAGE_BYTES
 } from '../src/native-messaging.js';
 import { chromeExtensionIdFromKey, chromeHostManifest, firefoxHostManifest, HOST_NAME } from '../src/host-manifest.js';
+import { assertInstallSupported } from '../src/install-host.js';
 import {
   readEndpointFile,
   writeEndpointFile,
@@ -161,6 +162,12 @@ describe('host manifest generation', () => {
     assert.equal(m.name, HOST_NAME);
     assert.equal(m.type, 'stdio');
     assert.deepEqual(m.allowed_origins, [`chrome-extension://${'a'.repeat(32)}/`]);
+  });
+
+  test('installing on a platform we have not implemented is refused, not guessed at', () => {
+    assert.throws(() => assertInstallSupported('darwin'), /Linux-only/);
+    assert.throws(() => assertInstallSupported('win32'), /not yet implemented/);
+    assert.doesNotThrow(() => assertInstallSupported('linux'));
   });
 
   test('the firefox host manifest uses allowed_extensions with the gecko id', () => {

@@ -17,6 +17,7 @@
   "files": [
     "server/src/",
     "extension/",
+    "scripts/",
     "docs/PROTOCOL.md",
     "docs/ARCHITECTURE.md"
   ],

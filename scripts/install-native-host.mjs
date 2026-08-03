@@ -3,14 +3,15 @@
  * Installs the BrowserBuddy native-messaging host manifest so a browser can
  * spawn the host with ext.runtime.connectNative().
  *
- * Every path written outside the repository is printed. Nothing is installed
- * implicitly: --target-dir is always derived from an explicit --profile (Chrome)
- * or --home (Firefox), so a run can be pointed at a throwaway directory.
+ * This is the development entry point: it can point the install at a throwaway
+ * profile, which is what the smoke tests need. End users run the shipped
+ * command instead -- `browserbuddy install-host --browser chrome|firefox` --
+ * which calls the very same installNativeHost() from server/src/install-host.js.
  *
- *   node scripts/install-native-host.mjs --browser chromium --profile <user-data-dir> [--data-dir <dir>]
- *   node scripts/install-native-host.mjs --browser firefox  --home <home-dir>       [--data-dir <dir>]
+ *   node scripts/install-native-host.mjs --browser chrome   --profile <user-data-dir> [--data-dir <dir>]
+ *   node scripts/install-native-host.mjs --browser firefox  --home <home-dir>         [--data-dir <dir>]
  *
- *   --browser    chromium | firefox (required)
+ *   --browser    chrome | firefox (required; "chrome" covers the Chromium family)
  *   --profile    Chromium --user-data-dir; the manifest goes in
  *                <profile>/NativeMessagingHosts/ (Chromium reads it from there,
  *                so the user's ~/.config/chromium is never touched)
@@ -21,22 +22,15 @@
  *                (default: server/data inside this checkout)
  *   --launcher-dir  where to write the generated launcher shell script
  *                (default: alongside the manifest)
+ *
+ * Every path written outside the repository is printed.
  */
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  HOST_NAME,
-  chromeExtensionIdFromKey,
-  chromeHostManifest,
-  firefoxHostManifest,
-  launcherScript
-} from '../server/src/host-manifest.js';
+import { HOST_NAME } from '../server/src/host-manifest.js';
+import { installNativeHost, DEFAULT_HOST_DATA_DIR, BROWSER_CHOICES } from '../server/src/install-host.js';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(HERE, '..');
-const HOST_SCRIPT = path.join(ROOT, 'server', 'src', 'native-host-bin.js');
-const EXTENSION_MANIFEST = path.join(ROOT, 'extension', 'manifest.json');
+export { installNativeHost };
 
 function option(name) {
   const i = process.argv.indexOf(name);
@@ -48,70 +42,31 @@ function die(message) {
   process.exit(2);
 }
 
-export function installNativeHost({ browser, profileDir, homeDir, dataDir, launcherDir, extensionDir = path.join(ROOT, 'extension') }) {
-  const extManifest = JSON.parse(fs.readFileSync(path.join(extensionDir, 'manifest.json'), 'utf8'));
-
-  let targetDir;
-  let manifest;
-  let extensionId;
-  if (browser === 'chromium') {
-    if (!extManifest.key) {
-      throw new Error(
-        `${EXTENSION_MANIFEST} has no "key". Without it Chrome derives a random extension id from the ` +
-          'unpacked path and allowed_origins cannot name it. Add the base64 SubjectPublicKeyInfo back.'
-      );
-    }
-    extensionId = chromeExtensionIdFromKey(extManifest.key);
-    targetDir = path.join(profileDir, 'NativeMessagingHosts');
-  } else {
-    extensionId = extManifest.browser_specific_settings?.gecko?.id;
-    if (!extensionId) throw new Error(`${EXTENSION_MANIFEST} has no browser_specific_settings.gecko.id.`);
-    targetDir = path.join(homeDir, '.mozilla', 'native-messaging-hosts');
-  }
-
-  const launcherTarget = launcherDir ?? targetDir;
-  fs.mkdirSync(targetDir, { recursive: true });
-  fs.mkdirSync(launcherTarget, { recursive: true });
-
-  const launcherPath = path.join(launcherTarget, `${HOST_NAME}.sh`);
-  fs.writeFileSync(
-    launcherPath,
-    launcherScript({ nodePath: process.execPath, hostScript: HOST_SCRIPT, dataDir }),
-    { mode: 0o755 }
-  );
-  fs.chmodSync(launcherPath, 0o755);
-
-  manifest =
-    browser === 'chromium'
-      ? chromeHostManifest({ hostPath: launcherPath, extensionId })
-      : firefoxHostManifest({ hostPath: launcherPath, extensionId });
-
-  const manifestPath = path.join(targetDir, `${HOST_NAME}.json`);
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-
-  return { manifestPath, launcherPath, extensionId, targetDir, dataDir };
-}
-
 function main() {
   const browser = option('--browser');
-  if (browser !== 'chromium' && browser !== 'firefox') {
-    die('--browser must be "chromium" or "firefox".');
+  if (!BROWSER_CHOICES.includes(browser)) {
+    die(`--browser must be one of ${BROWSER_CHOICES.join(', ')}.`);
   }
   const profileDir = option('--profile');
   const homeDir = option('--home');
-  if (browser === 'chromium' && !profileDir) die('--profile <user-data-dir> is required for --browser chromium.');
+  if (browser === 'chrome' && !profileDir) die('--profile <user-data-dir> is required for --browser chrome.');
   if (browser === 'firefox' && !homeDir) die('--home <home-dir> is required for --browser firefox.');
 
-  const dataDir = path.resolve(option('--data-dir') ?? path.join(ROOT, 'server', 'data'));
+  const dataDir = path.resolve(option('--data-dir') ?? DEFAULT_HOST_DATA_DIR);
   const launcherDir = option('--launcher-dir') ? path.resolve(option('--launcher-dir')) : null;
 
-  const result = installNativeHost({
-    browser,
-    profileDir: profileDir ? path.resolve(profileDir) : null,
-    homeDir: homeDir ? path.resolve(homeDir) : null,
-    dataDir,
-    launcherDir
-  });
+  let result;
+  try {
+    result = installNativeHost({
+      browser,
+      profileDir: profileDir ? path.resolve(profileDir) : null,
+      homeDir: homeDir ? path.resolve(homeDir) : null,
+      dataDir,
+      launcherDir
+    });
+  } catch (err) {
+    die(err.message);
+  }
 
   console.log(`host name:     ${HOST_NAME}`);
   console.log(`extension id:  ${result.extensionId}`);

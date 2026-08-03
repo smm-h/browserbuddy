@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCli, DEFAULT_DATA_DIR, VERSION } from '../src/cli.js';
-import { SERVER_ROOT } from './helpers.js';
+import { chromeExtensionIdFromKey, HOST_NAME } from '../src/host-manifest.js';
+import { makeTmpDir, removeTmpDir, SERVER_ROOT } from './helpers.js';
 
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
 
@@ -63,6 +64,86 @@ describe('CLI', () => {
     assert.equal(r.exitCode, 1);
     assert.match(r.stderr, /invalid --port value/);
     assert.equal(r.stdout, '');
+  });
+
+  test('install-host requires --browser and rejects anything but chrome/firefox', async () => {
+    const missing = await createCli().test(['install-host']);
+    assert.equal(missing.exitCode, 1);
+    assert.match(missing.stderr, /--browser/);
+
+    const wrong = await createCli().test(['install-host', '--browser', 'safari']);
+    assert.equal(wrong.exitCode, 1);
+    assert.match(wrong.stderr, /chrome/);
+  });
+
+  test('install-host writes a chrome manifest and launcher into the named profile', async () => {
+    // The install writes to Linux-specific locations and hard-errors elsewhere,
+    // so this test asserts the Linux behaviour on Linux and the refusal
+    // everywhere else -- never a silent install into the wrong place.
+    const tmp = makeTmpDir('install-host');
+    try {
+      const profile = path.join(tmp, 'profile');
+      const dataDir = path.join(tmp, 'data');
+      const r = await createCli().test([
+        'install-host',
+        '--browser',
+        'chrome',
+        '--user-data-dir',
+        profile,
+        '--data-dir',
+        dataDir
+      ]);
+      if (process.platform !== 'linux') {
+        assert.equal(r.exitCode, 1);
+        assert.match(r.stderr, /Linux-only/);
+        return;
+      }
+      assert.equal(r.exitCode, 0);
+      assert.equal(r.stdout, '', 'the CLI never writes to stdout');
+
+      const manifestPath = path.join(profile, 'NativeMessagingHosts', `${HOST_NAME}.json`);
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      const extManifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'extension', 'manifest.json'), 'utf8'));
+      assert.equal(manifest.name, HOST_NAME);
+      assert.deepEqual(manifest.allowed_origins, [
+        `chrome-extension://${chromeExtensionIdFromKey(extManifest.key)}/`
+      ]);
+      assert.ok(path.isAbsolute(manifest.path), 'the manifest path must be absolute');
+      assert.equal(fs.statSync(manifest.path).mode & 0o111, 0o111, 'the launcher must be executable');
+
+      const launcher = fs.readFileSync(manifest.path, 'utf8');
+      assert.ok(
+        launcher.includes(path.join(SERVER_ROOT, 'src', 'native-host-bin.js')),
+        'the launcher must exec the installed host script by absolute path'
+      );
+      assert.ok(launcher.includes(dataDir), 'the launcher must bake in --data-dir');
+    } finally {
+      removeTmpDir(tmp);
+    }
+  });
+
+  test('install-host refuses the wrong browser\'s profile flag', async () => {
+    const r = await createCli().test(['install-host', '--browser', 'firefox', '--user-data-dir', '/tmp/x']);
+    assert.equal(r.exitCode, 1);
+    assert.match(r.stderr, /--user-data-dir applies to Chrome only/);
+  });
+
+  test('install-host writes a firefox manifest keyed on HOME', async () => {
+    if (process.platform !== 'linux') return;
+    const tmp = makeTmpDir('install-host-ff');
+    try {
+      const r = await createCli().test(['install-host', '--browser', 'firefox', '--home', tmp, '--data-dir', path.join(tmp, 'data')]);
+      assert.equal(r.exitCode, 0);
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(tmp, '.mozilla', 'native-messaging-hosts', `${HOST_NAME}.json`), 'utf8')
+      );
+      const extManifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'extension', 'manifest.json'), 'utf8'));
+      assert.deepEqual(manifest.allowed_extensions, [extManifest.browser_specific_settings.gecko.id]);
+      assert.equal(manifest.allowed_origins, undefined);
+      assert.ok(path.isAbsolute(manifest.path));
+    } finally {
+      removeTmpDir(tmp);
+    }
   });
 
   test('--version reports the package version', async () => {

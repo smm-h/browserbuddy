@@ -58,13 +58,43 @@
         {
           "name": "port",
           "type": "int",
-          "help": "WebSocket hub port on 127.0.0.1. Must match WS_URL in extension/background.js.",
+          "help": "WebSocket hub port on 127.0.0.1. Must match WS_URL in extension/background.js, which only applies when that file sets TRANSPORT to websocket.",
           "default": 8590
         },
         {
           "name": "data-dir",
           "type": "str",
           "help": "Directory for event logs and recorded demonstrations. Defaults to server/data inside the installed package."
+        }
+      ]
+    },
+    "install-host": {
+      "name": "install-host",
+      "help": "Install the native-messaging host manifest so the browser can spawn the BrowserBuddy host (which serves MCP over loopback HTTP).",
+      "flags": [
+        {
+          "name": "browser",
+          "type": "str",
+          "help": "Which browser to install for. \"chrome\" covers the whole Chromium family.",
+          "choices": [
+            "chrome",
+            "firefox"
+          ]
+        },
+        {
+          "name": "user-data-dir",
+          "type": "str",
+          "help": "Chrome only: the browser profile directory (--user-data-dir). Defaults to the first Chrome or Chromium profile directory that exists under your home."
+        },
+        {
+          "name": "home",
+          "type": "str",
+          "help": "Firefox only: the HOME whose .mozilla/native-messaging-hosts receives the manifest. Defaults to your home directory."
+        },
+        {
+          "name": "data-dir",
+          "type": "str",
+          "help": "Directory the installed host will use for event logs, demonstrations and its endpoint files. Defaults to server/data inside the installed package."
         }
       ]
     }

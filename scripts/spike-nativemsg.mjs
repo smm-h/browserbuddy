@@ -424,7 +424,7 @@ async function main() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 
   const install = installNativeHost({
-    browser: 'chromium',
+    browser: 'chrome',
     profileDir: PROFILE_DIR,
     dataDir: DATA_DIR
   });
