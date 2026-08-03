@@ -16,22 +16,23 @@ BrowserBuddy :-: var key="project.version" is a shared browser for you and your 
   - `content.js` — injected into pages: DOM observation, selector construction, redaction, and the page-level half of the RPC surface.
 - `server/src/` — the Node process.
   - `index.js` — `browserbuddy` bin entry point; runs the CLI and reports fatal errors on stderr.
-  - `cli.js` — strictcli app (`serve` with `--port`, `--data-dir`), plus `startServer` which wires hub, store, demos and the MCP server together.
+  - `cli.js` — strictcli app (`serve` with `--port`, `--data-dir`; `install-host` with `--browser`, `--user-data-dir`/`--home`, `--data-dir`), plus `startServer` which wires hub, store, demos and the MCP server together.
   - `hub.js` — WebSocket server: one extension connection at a time, RPC request/response correlation with timeouts, event fan-out.
   - `rpc-peer.js` — `PendingRpcs`, the one in-flight RPC table both transports use.
   - `native-host-bin.js` — the executable the browser spawns via `connectNative`. Deliberately not a strictcli app: the browser appends its own arguments. Hands fd 1 to the framing channel and points the process stdout stream at stderr.
-  - `native-messaging.js` — the browser's wire framing: 32-bit little-endian length + UTF-8 JSON, 1 MB cap, incremental decoder.
+  - `native-messaging.js` — the browser's wire framing: 32-bit little-endian length + UTF-8 JSON, incremental decoder, and the per-direction size caps (host → browser just under 1 MB, browser → host 128 MB).
   - `native-hub.js` — the Hub interface (`isConnected`/`rpc`/`event`) over the native pipe, so `mcp.js` is transport-blind.
   - `http-mcp.js` — Streamable-HTTP MCP on an ephemeral loopback port behind a bearer token; one MCP session per `initialize`.
-  - `endpoint-file.js` — atomic, mode-0600 `mcp-endpoint.json` writer: the live url and token an MCP client dials.
+  - `endpoint-file.js` — atomic, mode-0600 `mcp-endpoint.json` (the live url and token an MCP client dials, validated against the host's pid on read) and `endpoint-state.json` (the token and port the next host respawn reuses).
   - `host-manifest.js` — Chrome/Firefox native-messaging host manifests, the launcher script, and the Chrome-id-from-key derivation.
+  - `install-host.js` — the one implementation of the host install (manifest + launcher, platform-default profile discovery, Linux-only guard), used by both `browserbuddy install-host` and `scripts/install-native-host.mjs`.
   - `store.js` — event store: 1000-entry ring buffer, per-UTC-day JSONL append, `query` and `waitFor` (the lockstep primitive).
   - `mcp.js` — the MCP tool surface: 18 acting, 3 observing, 4 learning tools, with zod schemas.
   - `demos.js` — demonstration recorder: captures user events while recording, cleans them into a replayable step list, persists one JSON file per demo.
 - `server/test/` — `node --test` suite, including a fake extension driver (`fake-extension.js`) for hub/MCP tests and a fake browser (`fake-native-extension.js`) that spawns the real host over real pipes.
 - `scripts/e2e-smoke.mjs` — live end-to-end smoke test of the WebSocket carrier against a real browser with the real extension.
 - `scripts/spike-nativemsg.mjs` — live end-to-end proof of the native-messaging carrier: installs the host manifest into a throwaway Chromium profile, lets the browser spawn the host, then drives the MCP tools over HTTP.
-- `scripts/install-native-host.mjs` — writes the native-messaging host manifest and launcher for a named Chromium user-data-dir or Firefox HOME.
+- `scripts/install-native-host.mjs` — development CLI over `server/src/install-host.js`: writes the host manifest and launcher for a named Chromium user-data-dir or Firefox HOME. End users run `browserbuddy install-host --browser chrome|firefox` instead.
 - `docs/` — `PROTOCOL.md` (normative wire contract) and `ARCHITECTURE.md` (components, data flow, rationale), both hand-maintained; `_README.md` and `_CLAUDE.md` are the selfdoc templates for the root files.
 - `pypi/` — PyPI name-reservation placeholder package only. Not the product; do not grow it.
 

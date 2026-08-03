@@ -25,7 +25,7 @@ Most browser tooling for assistants (chrome-devtools-mcp, Playwright MCP, and an
 
 ## Setup
 
-> **Working copy note.** `extension/background.js` currently defaults `TRANSPORT` to `'native'`: the extension asks the browser to spawn a native-messaging host, which serves MCP over a loopback HTTP endpoint of its own, instead of dialling `browserbuddy serve`. The setup below describes the WebSocket path, which is still fully working but must be selected explicitly by setting `const TRANSPORT = 'websocket';` in `extension/background.js`. See `docs/PROTOCOL.md` §1 for both carriers and `scripts/spike-nativemsg.mjs` for the native path end to end.
+> **Working copy note.** `extension/background.js` currently defaults `TRANSPORT` to `'native'`: the extension asks the browser to spawn a native-messaging host, which serves MCP over a loopback HTTP endpoint of its own, instead of dialling `browserbuddy serve`. On that path the one setup step is `browserbuddy install-host --browser chrome|firefox` (Linux only in this version), which installs the host manifest the browser needs; the host then publishes its url and bearer token in `server/data/mcp-endpoint.json`, and keeps both stable across restarts. The setup below describes the WebSocket path, which is still fully working but must be selected explicitly by setting `const TRANSPORT = 'websocket';` in `extension/background.js`. See `docs/PROTOCOL.md` §1 for both carriers and `scripts/spike-nativemsg.mjs` for the native path end to end.
 
 ### 1. Load the extension
 
@@ -215,12 +215,13 @@ Accepted trade-offs in version :-: var key="project.version":
 - `package.json` — the npm package root (`browserbuddy`); `npm install` and `npm test` run from here
 - `server/` — Node.js process, MCP stdio server and WebSocket hub in one
   - `src/index.js` — `browserbuddy` bin entry point
-  - `src/cli.js` — strictcli command definition (`serve`) and server startup
+  - `src/cli.js` — strictcli command definitions (`serve`, `install-host`) and server startup
   - `src/native-host-bin.js` — the executable the browser spawns for the native-messaging carrier
   - `data/` — runtime state (gitignored)
     - `events/` — JSONL event logs
     - `demos/` — recorded demonstrations
     - `mcp-endpoint.json` — live url + bearer token published by the native-messaging host
+    - `endpoint-state.json` — the token and port the next host respawn reuses, so a configured MCP endpoint keeps working
 - `docs/`
   - `ARCHITECTURE.md` — components, data flow, and the reasoning behind the design
   - `PROTOCOL.md` — the complete extension/hub wire protocol
