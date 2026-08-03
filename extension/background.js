@@ -140,12 +140,16 @@ function nativeConnect() {
       startPing();
     },
     onMessage: handleHubMessage,
-    onClose: function () {
+    onClose: function (detail) {
       stopPing();
-      setBadge(false);
+      // A spawn failure must stay visible: onClose follows onSpawnFailure by
+      // microseconds, and clearing the badge here would erase the only sign
+      // the user gets that the host manifest is missing.
+      if (lastTransportError !== null) setBadgeError();
+      else setBadgeDisconnected(detail);
       scheduleReconnect();
     },
-    onError: function (message) {
+    onSpawnFailure: function (message) {
       lastTransportError = message;
       // Loud and actionable: a missing host manifest is the usual cause and
       // there is no other wire to quietly succeed on.
@@ -170,6 +174,22 @@ function setBadgeError() {
   }
 }
 
+/**
+ * The neutral state: the host was up and the pipe closed (browser shutdown,
+ * background teardown, host crash). Nothing for the user to fix, so no error
+ * badge -- just an honest tooltip while the reconnect ladder runs.
+ */
+function setBadgeDisconnected(detail) {
+  try {
+    ext.action.setBadgeText({ text: '' });
+    ext.action.setTitle({
+      title: 'BrowserBuddy: native host disconnected (' + (detail || 'pipe closed') + '); reconnecting.'
+    });
+  } catch (e) {
+    // The action API can be unavailable very early in worker startup.
+  }
+}
+
 // ---------------------------------------------------------------------------
 // WebSocket transport (0.1.0 wire; only reached when TRANSPORT is 'websocket')
 // ---------------------------------------------------------------------------
@@ -183,6 +203,8 @@ function setBadge(connected) {
     ext.action.setBadgeText({ text: connected ? '●' : '' });
     if (connected) {
       ext.action.setBadgeBackgroundColor({ color: '#1a7f37' });
+      // Clears any error or disconnected tooltip left by a previous attempt.
+      ext.action.setTitle({ title: 'BrowserBuddy: connected' });
     }
   } catch (e) {
     // The action API can be unavailable very early in worker startup.

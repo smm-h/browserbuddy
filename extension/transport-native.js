@@ -40,7 +40,8 @@ const BBNativeTransport = (function () {
       '  Firefox: ~/.mozilla/native-messaging-hosts/' +
       BB_NATIVE_HOST_NAME +
       '.json\n' +
-      'Run: node scripts/install-native-host.mjs --browser <chromium|firefox> ...\n' +
+      'Run: browserbuddy install-host --browser <chrome|firefox>\n' +
+      '(from a checkout: node scripts/install-native-host.mjs --browser <chrome|firefox> ...)\n' +
       'The manifest must list this extension in allowed_origins (Chrome) or ' +
       'allowed_extensions (Firefox), and its "path" must be an executable launcher.'
     );
@@ -57,6 +58,14 @@ const BBNativeTransport = (function () {
      * Asks the browser to spawn the host and attaches the handlers. Returns
      * true when the Port was created; a host that fails to launch surfaces
      * later through onDisconnect, which is the only signal the browser gives.
+     *
+     * Two failure shapes, deliberately kept apart:
+     *   - onSpawnFailure(message): connectNative threw, or the port died
+     *     without the host ever answering. That is almost always a missing or
+     *     wrong host manifest, so it gets the long actionable text.
+     *   - onClose(detail): the pipe closed after the host had been talking --
+     *     a browser shutdown, a service-worker teardown, a host crash. Routine;
+     *     it must not shout "install the manifest" at the user.
      */
     connect: function (h) {
       handlers = h || {};
@@ -68,16 +77,23 @@ const BBNativeTransport = (function () {
         p = api.runtime.connectNative(BB_NATIVE_HOST_NAME);
       } catch (e) {
         open = false;
-        if (handlers.onError) {
-          handlers.onError(missingHostMessage('connectNative threw: ' + (e && e.message ? e.message : String(e)) + '.'));
+        if (handlers.onSpawnFailure) {
+          handlers.onSpawnFailure(
+            missingHostMessage('connectNative threw: ' + (e && e.message ? e.message : String(e)) + '.')
+          );
         }
         return false;
       }
 
       port = p;
       open = true;
+      // Proof the host came up: the browser reports a failed spawn only as a
+      // disconnect, so "did it ever speak" is the only signal that separates a
+      // never-started host from one that later went away.
+      let hostSpoke = false;
 
       p.onMessage.addListener(function (msg) {
+        hostSpoke = true;
         if (handlers.onMessage) handlers.onMessage(msg);
       });
 
@@ -87,9 +103,9 @@ const BBNativeTransport = (function () {
         const detail = err && err.message ? err.message : 'The host exited or the pipe was closed.';
         port = null;
         open = false;
-        // A missing manifest and a crashed host are different failures and get
-        // different text; neither is retried with some other transport.
-        if (handlers.onError) handlers.onError(missingHostMessage('The browser reported: ' + detail + '.'));
+        if (!hostSpoke && handlers.onSpawnFailure) {
+          handlers.onSpawnFailure(missingHostMessage('The browser reported: ' + detail + '.'));
+        }
         if (handlers.onClose) handlers.onClose(detail);
       });
 
