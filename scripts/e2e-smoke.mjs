@@ -63,8 +63,13 @@ const LOAD_POLL_MS = 10000;
 
 /**
  * The directory actually loaded into the browser: a staged copy of extension/
- * with WS_URL rewritten to the test port. Staging keeps the repo untouched and
- * lets the test run on a secondary port while a live hub occupies 8590.
+ * with TRANSPORT forced to 'websocket' and WS_URL rewritten to the test port.
+ * Staging keeps the repo untouched and lets the test run on a secondary port
+ * while a live hub occupies 8590.
+ *
+ * This harness proves the 0.1.0 WebSocket wire specifically. The repo default
+ * is native messaging (scripts/spike-nativemsg.mjs proves that path), so the
+ * transport is selected here explicitly rather than left to the default.
  */
 let stagedExtensionDir = EXTENSION_DIR;
 
@@ -76,12 +81,17 @@ function stageExtension(port) {
     fs.copyFileSync(path.join(EXTENSION_DIR, name), path.join(staged, name));
   }
   const bgPath = path.join(staged, 'background.js');
-  const bg = fs.readFileSync(bgPath, 'utf8');
-  const anchor = "const WS_URL = 'ws://127.0.0.1:8590/ws';";
-  if (!bg.includes(anchor)) {
-    throw new Error(`background.js no longer contains ${JSON.stringify(anchor)}; update stageExtension().`);
+  let bg = fs.readFileSync(bgPath, 'utf8');
+  for (const [anchor, replacement] of [
+    ["const WS_URL = 'ws://127.0.0.1:8590/ws';", `const WS_URL = 'ws://127.0.0.1:${port}/ws';`],
+    ["const TRANSPORT = 'native';", "const TRANSPORT = 'websocket';"]
+  ]) {
+    if (!bg.includes(anchor)) {
+      throw new Error(`background.js no longer contains ${JSON.stringify(anchor)}; update stageExtension().`);
+    }
+    bg = bg.replace(anchor, replacement);
   }
-  fs.writeFileSync(bgPath, bg.replace(anchor, `const WS_URL = 'ws://127.0.0.1:${port}/ws';`));
+  fs.writeFileSync(bgPath, bg);
   return staged;
 }
 

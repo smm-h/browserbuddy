@@ -13,6 +13,22 @@
 // synchronously at the top level. Listeners registered inside async callbacks
 // are lost when the background context is torn down and restarted.
 
+// transport-native.js shares this global scope. Chrome's service worker pulls
+// it in here; Firefox's event page already loaded it from background.scripts,
+// where importScripts does not exist.
+if (typeof importScripts === 'function') {
+  importScripts('transport-native.js');
+}
+
+// Which wire this build talks. Chosen at load time, never at runtime: there is
+// no "try native, fall back to WebSocket" cascade -- a transport that cannot
+// connect reports a hard error and retries itself, nothing else.
+//   'native'    -- ext.runtime.connectNative(): the browser spawns the host
+//                  process, which serves MCP over loopback HTTP. Default.
+//   'websocket' -- the 0.1.0 wire, kept working for the legacy smoke harness,
+//                  which rewrites this constant when it stages the extension.
+const TRANSPORT = 'native';
+
 // Firefox's promise-based API surface is `browser` (its `chrome` namespace is
 // callback-based); Chrome's `chrome` is promise-based in MV3. Binding one name
 // gives the rest of the file the same promise-returning API on both browsers.
@@ -57,11 +73,82 @@ let agentCreatingTabUntil = 0;
  */
 let agentFocusUntil = 0;
 
+/** Last transport failure, surfaced through the badge tooltip and the console. */
+let lastTransportError = null;
+
 // ---------------------------------------------------------------------------
-// Connection
+// Connection (transport-neutral entry points)
 // ---------------------------------------------------------------------------
 
 function isOpen() {
+  return TRANSPORT === 'native' ? BBNativeTransport.isOpen() : wsIsOpen();
+}
+
+function send(obj) {
+  return TRANSPORT === 'native' ? nativeSend(obj) : wsSend(obj);
+}
+
+function connect() {
+  if (TRANSPORT === 'native') nativeConnect();
+  else wsConnect();
+}
+
+// ---------------------------------------------------------------------------
+// Native-messaging transport
+// ---------------------------------------------------------------------------
+
+function nativeConnect() {
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (BBNativeTransport.isOpen()) return;
+
+  const started = BBNativeTransport.connect({
+    onOpen: function () {
+      backoffIndex = 0;
+      lastTransportError = null;
+      setBadge(true);
+      send({ kind: 'hello', role: 'extension', version: VERSION, transport: 'native-messaging' });
+      flushBuffer();
+      startPing();
+    },
+    onMessage: handleHubMessage,
+    onClose: function () {
+      stopPing();
+      setBadge(false);
+      scheduleReconnect();
+    },
+    onError: function (message) {
+      lastTransportError = message;
+      // Loud and actionable: a missing host manifest is the usual cause and
+      // there is no other wire to quietly succeed on.
+      console.error('[browserbuddy] ' + message);
+      setBadgeError();
+    }
+  });
+  if (!started) scheduleReconnect();
+}
+
+function nativeSend(obj) {
+  return BBNativeTransport.send(obj);
+}
+
+function setBadgeError() {
+  try {
+    ext.action.setBadgeText({ text: '!' });
+    ext.action.setBadgeBackgroundColor({ color: '#b42318' });
+    ext.action.setTitle({ title: 'BrowserBuddy: ' + (lastTransportError || 'transport error') });
+  } catch (e) {
+    // The action API can be unavailable very early in worker startup.
+  }
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket transport (0.1.0 wire; only reached when TRANSPORT is 'websocket')
+// ---------------------------------------------------------------------------
+
+function wsIsOpen() {
   return ws !== null && ws.readyState === WebSocket.OPEN;
 }
 
@@ -76,7 +163,7 @@ function setBadge(connected) {
   }
 }
 
-function connect() {
+function wsConnect() {
   if (ws !== null && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
     return;
   }
@@ -152,8 +239,8 @@ function stopPing() {
   }
 }
 
-function send(obj) {
-  if (!isOpen()) return false;
+function wsSend(obj) {
+  if (!wsIsOpen()) return false;
   try {
     ws.send(JSON.stringify(obj));
     return true;

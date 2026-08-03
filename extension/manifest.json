@@ -3,7 +3,9 @@
   "name": "BrowserBuddy",
   "version": "0.1.0",
   "description": "Streams your browsing activity to the local BrowserBuddy MCP server and lets the paired AI assistant act in your browser.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxjRFZlCN9KL+kw+fYdVwAy+w1dTUvrQ0FLVu4YI3gsAzcfqLqPAVgeNyw76rPhJeOGeQz3oVVOWdi6/UaLBg9gxAH0MvaP89kZLvQU1WulnlaMC+bgwgVNet+5RwDhFHdyzAbmhz1i5pYVsR3m4DYviYtllGoRtyDooYhKmBL8d62LWTLt/XZkQ5efG/UFvRBAU7sa39y9MxNYYNmP2+do2YyWdZZiovBKrU6xOYQVyp9ynOHY16hezWGmjNF9iiVMaXrgFbPKteH9exlD8cxQyAQUXw6fCpyclCgobDJDEo++JiNZQ288kNlx3mo9KCmltrjYNY/v+X4TbP6t6JKwIDAQAB",
   "permissions": [
+    "nativeMessaging",
     "tabs",
     "webNavigation",
     "downloads",
@@ -16,7 +18,7 @@
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",
-    "scripts": ["background.js"]
+    "scripts": ["transport-native.js", "background.js"]
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://127.0.0.1:*"
