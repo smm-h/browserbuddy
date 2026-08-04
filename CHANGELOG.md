@@ -2,6 +2,37 @@
 
 # Changelog
 
+## 0.2.1
+
+0.2.1 carries the 0.2 transport inversion to npm. It is 0.2.0 plus a secret-scan allowlist: the code, the extension and the docs are identical.
+
+<details>
+<summary>Context</summary>
+
+0.2.0 reached GitHub and PyPI but not npm. The publish workflow scans the
+source tree with gitleaks, and the scan read extension/manifest.json's "key" as
+a generic API key. It is an RSA public key -- Chrome derives an unpacked
+extension's id from it, and the id has to be stable because the
+native-messaging host manifest names it in allowed_origins -- so it is
+necessarily committed and public by construction. It was added during the 0.2
+work, which is why 0.1.0 published cleanly and 0.2.0 did not.
+
+Because PyPI had already accepted 0.2.0, undoing the release was not available:
+a published version cannot be withdrawn and re-uploaded. So this is a fix
+forward. .gitleaks.toml now allowlists that literal value -- pinned to the
+value rather than to the file, because gitleaks 8.24.3 accepts
+condition = "AND" and then ignores it, which would have turned a path-scoped
+allowlist into a blanket exemption for the whole manifest.
+
+Nothing else changed between 0.2.0 and 0.2.1. For the 0.2 release notes proper,
+see the 0.2.0 entry.
+
+</details>
+
+### Fixes
+
+- **The 0.2 line is installable from npm.** The 0.2.0 npm publish was blocked by the release secret scan, which read the extension manifest's public key as a credential; 0.2.1 is the first npm build of the 0.2 line. PyPI and GitHub already carried 0.2.0, and the code is unchanged between the two.
+
 ## 0.2.0
 
 BrowserBuddy 0.2.0 inverts the transport. The browser now spawns a native-messaging host that owns a token-protected loopback MCP endpoint, replacing the unauthenticated WebSocket hub of 0.1. The agent's endpoint stays stable across browser service-worker respawns, observation history survives restarts, and a guided connect flow (browserbuddy install-host + browserbuddy client-config) wires Claude Code to your real Chrome or Firefox.

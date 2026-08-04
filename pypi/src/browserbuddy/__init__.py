@@ -7,7 +7,7 @@ so nothing can mistake it for a working implementation.
 
 import sys
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 _MESSAGE = (
     "BrowserBuddy's PyPI package is a name reservation. The MCP server ships "

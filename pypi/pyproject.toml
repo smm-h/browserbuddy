@@ -1,6 +1,6 @@
 [project]
 name = "browserbuddy"
-version = "0.2.0"
+version = "0.2.1"
 description = "Name reservation for BrowserBuddy, the browser/AI shared-space MCP server. The actual server ships on npm: npx browserbuddy"
 readme = "README.md"
 license = "Apache-2.0"
