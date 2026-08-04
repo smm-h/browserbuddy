@@ -2,11 +2,34 @@
 format_version = 1
 # Version bump type: patch, minor, major, infra, or prerelease
 #   prerelease: advance an existing pre-release (0.6.0-beta.0 -> -beta.1)
-bump = ""
+bump = "minor"
 # Short description of this release (required)
-description = ""
+description = "BrowserBuddy 0.2.0 inverts the transport. The browser now spawns a native-messaging host that owns a token-protected loopback MCP endpoint, replacing the unauthenticated WebSocket hub of 0.1. The agent's endpoint stays stable across browser service-worker respawns, observation history survives restarts, and a guided connect flow (browserbuddy install-host + browserbuddy client-config) wires Claude Code to your real Chrome or Firefox."
 # Optional context explaining why these changes were made
-context = ""
+context = """
+The transport inversion is first of all a security fix. In 0.1 the server
+listened on ws://127.0.0.1:8590 with no authentication, so any process running
+as the same OS user -- any npm postinstall script, any other agent, anything
+that could reach loopback -- could drive the logged-in browser. 0.2 closes that:
+the browser spawns the host over native messaging, the host binds an ephemeral
+loopback port and mints a bearer token, and the trust boundary is the OS user
+rather than "whoever gets to the port first."
+
+It is also a lifetime inversion. The always-on side -- the browser -- now owns
+the listening endpoint, and the session-scoped side -- the agent -- dials in.
+That is what makes the endpoint stable across service-worker respawns and what
+lets observation history survive a restart, neither of which the old
+short-lived-server-owns-the-socket arrangement could offer.
+
+Also here: a red-green fix to actor attribution, where a slow cross-origin load
+could outlive the agent-attribution window and come back tagged as the user's,
+polluting observation, poisoning demonstrations, and potentially waking a
+browser_wait_for_user the agent had started itself.
+
+The standalone-product half of the inversion is deliberately deferred to a
+later release: moving semantics into the extension, a consent GUI, a
+deterministic replay engine, and store distribution are not in 0.2.0.
+"""
 # Pre-release channel: alpha, beta, rc, or stable (ordered;
 # demotion is an error). With patch/minor/major it ENTERS the
 # channel (0.5.2 + minor + alpha -> 0.6.0-alpha.0); with
