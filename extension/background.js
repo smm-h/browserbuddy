@@ -82,6 +82,18 @@ let buffer = [];
 /** tabId -> epoch ms until which background events for that tab are the agent's. */
 const agentTabs = new Map();
 
+/**
+ * tabId -> actor of the navigation that most recently committed in that tab,
+ * captured at commit time and consumed by that navigation's page_loaded.
+ *
+ * A cross-origin load can take many seconds, far longer than the 1500 ms agent
+ * window. The commit and the completion are two halves of one navigation, so
+ * the completion inherits the commit's actor instead of re-deciding on a clock
+ * that has moved on. Each new commit replaces the entry, which is what keeps a
+ * later human navigation out of the agent's chain.
+ */
+const pendingLoadActors = new Map();
+
 /** Epoch ms until which a downloads.onCreated is attributed to the agent. */
 let agentDownloadUntil = 0;
 
@@ -392,10 +404,16 @@ function actorForTab(tabId) {
   return 'agent';
 }
 
-function emitTabEvent(type, tabId, url, data) {
+/**
+ * `actorOverride` exists for handlers that must fetch something (a tab title)
+ * before they can emit: the actor has to be decided when the browser event
+ * fires, never after an async hop, or a window that expires mid-fetch turns the
+ * agent's own effect into the user's.
+ */
+function emitTabEvent(type, tabId, url, data, actorOverride) {
   sendEvent({
     ts: Date.now(),
-    actor: actorForTab(tabId),
+    actor: actorOverride || actorForTab(tabId),
     type: type,
     tabId: typeof tabId === 'number' ? tabId : null,
     url: url || null,
@@ -773,35 +791,61 @@ ext.tabs.onCreated.addListener(function (tab) {
 ext.tabs.onRemoved.addListener(function (tabId) {
   emitTabEvent('tab_closed', tabId, null, {});
   agentTabs.delete(tabId);
+  pendingLoadActors.delete(tabId);
 });
 
 ext.tabs.onActivated.addListener(function (info) {
+  // Decided now, not after the title fetch below resolves.
+  const actor = actorForTab(info.tabId);
   ext.tabs
     .get(info.tabId)
     .then(function (tab) {
-      emitTabEvent('tab_activated', info.tabId, tab.url || null, { title: tab.title || null });
+      emitTabEvent('tab_activated', info.tabId, tab.url || null, { title: tab.title || null }, actor);
     })
     .catch(function () {
-      emitTabEvent('tab_activated', info.tabId, null, { title: null });
+      emitTabEvent('tab_activated', info.tabId, null, { title: null }, actor);
     });
 });
 
 ext.webNavigation.onCommitted.addListener(function (details) {
   if (details.frameId !== 0) return;
-  emitTabEvent('navigation', details.tabId, details.url || null, {
-    transitionType: details.transitionType || null
-  });
+  const actor = actorForTab(details.tabId);
+  // The commit decides the whole load: onCompleted reads this instead of asking
+  // the clock again once the load (which may take seconds) finally finishes.
+  pendingLoadActors.set(details.tabId, actor);
+  // Renew the tab's agent window so the rest of this navigation -- further
+  // commits of a redirect chain, and any other tab event it causes -- is still
+  // inside a window when it arrives.
+  if (actor === 'agent') markAgentTab(details.tabId);
+  emitTabEvent(
+    'navigation',
+    details.tabId,
+    details.url || null,
+    { transitionType: details.transitionType || null },
+    actor
+  );
 });
 
 ext.webNavigation.onCompleted.addListener(function (details) {
   if (details.frameId !== 0) return;
+  // The actor of the commit that started this load, or -- for a load with no
+  // observed commit -- the tab's actor now, before the title fetch's async hop.
+  let actor = pendingLoadActors.get(details.tabId);
+  if (actor === undefined) actor = actorForTab(details.tabId);
+  else pendingLoadActors.delete(details.tabId);
   ext.tabs
     .get(details.tabId)
     .then(function (tab) {
-      emitTabEvent('page_loaded', details.tabId, details.url || null, { title: tab.title || null });
+      emitTabEvent(
+        'page_loaded',
+        details.tabId,
+        details.url || null,
+        { title: tab.title || null },
+        actor
+      );
     })
     .catch(function () {
-      emitTabEvent('page_loaded', details.tabId, details.url || null, { title: null });
+      emitTabEvent('page_loaded', details.tabId, details.url || null, { title: null }, actor);
     });
 });
 

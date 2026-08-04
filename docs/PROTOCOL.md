@@ -284,6 +284,11 @@ Attribution is applied in two layers, because the two layers see different effec
 
 `screenshot` is a special case: it does not mark the tab in general, but when the target tab is not active it must activate it first, and it marks the tab before doing so — the activation is the agent's doing, not the user's.
 
+Two rules keep the window from expiring underneath an event that is still the agent's:
+
+- **The actor is decided when the browser event fires, never after an `await`.** `tab_activated` and `page_loaded` fetch the tab title before they can emit, and that fetch is an async hop of unbounded length. Both read the tab's actor synchronously, in the listener, and carry it through the fetch. Deciding afterwards would move attribution later in time than the event it describes.
+- **A load inherits the actor of the navigation that committed it.** `webNavigation.onCommitted` records its actor for the tab; the matching `page_loaded` uses that recorded actor instead of consulting the clock again, so a cross-origin load that takes longer than 1500 ms is still the agent's. An agent-attributed commit also renews the tab's window, which keeps the further commits of a redirect chain on the agent. Each commit replaces the tab's recorded actor, so the next human navigation is recorded as the user's and its own completion reports `user`; a `page_loaded` with no observed commit falls back to the tab's window.
+
 **Content-script layer — DOM effects.** The acting content RPCs (`click`, `fill`, `scroll`) run inside a wrapper that sets an in-page flag, and clears it **100 ms after the call returns**. This is a time window too, not an exact bracket: the synthetic `click()` or dispatched `input` event is delivered synchronously, but the debounced `input` and `scroll` emissions (§4.4) fire hundreds of milliseconds later, long after the flag is down. So the actor is captured **when the DOM listener runs** and carried through the debounce timer, which is what keeps a debounced agent action attributed to the agent.
 
 Two consequences worth knowing:

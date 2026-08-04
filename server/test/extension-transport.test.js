@@ -29,27 +29,48 @@ function noopEvent() {
   return { addListener() {} };
 }
 
-/** Every extension API background.js touches while loading and while dispatching. */
-function fakeBrowserApi(port) {
+/**
+ * Every extension API background.js touches while loading and while dispatching.
+ *
+ * `hooks.listeners` (a plain object) turns the browser events into recording
+ * registration points keyed by their API path, so a test can fire them the way
+ * the browser would. `hooks.tabsGet` replaces tabs.get, which is what lets a
+ * test hold the title fetch open while its clock runs.
+ */
+function fakeBrowserApi(port, hooks = {}) {
+  const listeners = hooks.listeners;
+  function event(name) {
+    if (!listeners) return noopEvent();
+    listeners[name] = [];
+    return { addListener: (fn) => listeners[name].push(fn) };
+  }
   return {
     runtime: {
       connectNative: () => port,
       lastError: null,
-      onMessage: noopEvent(),
+      onMessage: event('runtime.onMessage'),
       onStartup: noopEvent(),
       onInstalled: noopEvent()
     },
     tabs: {
-      onCreated: noopEvent(),
-      onRemoved: noopEvent(),
-      onActivated: noopEvent(),
+      onCreated: event('tabs.onCreated'),
+      onRemoved: event('tabs.onRemoved'),
+      onActivated: event('tabs.onActivated'),
       query: () => Promise.resolve([{ id: 1, active: true }]),
-      get: () => Promise.resolve({ id: 1, url: null, title: null }),
+      get: hooks.tabsGet || (() => Promise.resolve({ id: 1, url: null, title: null })),
+      update: (tabId) => Promise.resolve({ id: tabId, windowId: 10 }),
       sendMessage: () => Promise.resolve({ ok: true, result: {} })
     },
-    webNavigation: { onCommitted: noopEvent(), onCompleted: noopEvent() },
-    downloads: { onCreated: noopEvent() },
-    windows: { onFocusChanged: noopEvent(), WINDOW_ID_NONE: -1 },
+    webNavigation: {
+      onCommitted: event('webNavigation.onCommitted'),
+      onCompleted: event('webNavigation.onCompleted')
+    },
+    downloads: { onCreated: event('downloads.onCreated') },
+    windows: {
+      onFocusChanged: event('windows.onFocusChanged'),
+      update: () => Promise.resolve({}),
+      WINDOW_ID_NONE: -1
+    },
     alarms: { create() {}, onAlarm: noopEvent() },
     action: { setBadgeText() {}, setBadgeBackgroundColor() {}, setTitle() {} },
     storage: { session: { get: () => Promise.resolve({}), set: () => Promise.resolve() } }
@@ -65,7 +86,7 @@ function fakeBrowserApi(port) {
  * Timers are stubbed out: the keepalive interval background.js starts on
  * connect would otherwise pin the host process's event loop open forever.
  */
-async function loadBackground(port) {
+async function loadBackground(port, hooks = {}) {
   const code = [
     fs.readFileSync(TRANSPORT_SRC, 'utf8'),
     fs.readFileSync(BACKGROUND_SRC, 'utf8'),
@@ -73,13 +94,16 @@ async function loadBackground(port) {
     'globalThis.dispatchRpc = dispatchRpc;'
   ].join('\n');
   const context = vm.createContext({
-    browser: fakeBrowserApi(port),
+    browser: fakeBrowserApi(port, hooks),
     console,
     TextEncoder,
     setTimeout: () => 0,
     clearTimeout: () => {},
     setInterval: () => 0,
-    clearInterval: () => {}
+    clearInterval: () => {},
+    // Attribution is entirely a function of the clock, so tests that exercise
+    // it need to own the clock. Date.now is all background.js reads.
+    ...(hooks.clock ? { Date: { now: () => hooks.clock.now } } : {})
   });
   vm.runInContext(code, context);
   await new Promise((resolve) => setImmediate(resolve));
@@ -242,6 +266,217 @@ describe('background rpc dispatch', () => {
   test('an implemented method still dispatches', async () => {
     const result = await callRpc(context, port, { kind: 'rpc', id: 9, method: 'getPageState', params: {} });
     assert.equal(result.ok, true);
+  });
+});
+
+describe('background actor attribution', () => {
+  /** Fires one browser event into every listener background.js registered. */
+  function fire(listeners, name, ...args) {
+    const fns = listeners[name];
+    assert.ok(fns && fns.length > 0, `background.js registered no listener for ${name}`);
+    for (const fn of fns) fn(...args);
+  }
+
+  /** Lets the promise chains inside the background settle. */
+  function settle() {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
+
+  function events(port) {
+    return port.sent.filter((m) => m.kind === 'event').map((m) => m.event);
+  }
+
+  function eventsOfType(port, type) {
+    return events(port).filter((e) => e.type === type);
+  }
+
+  test('page_loaded stays the agent\'s when the title fetch outlives the agent window', async () => {
+    // The actor must be decided when webNavigation.onCompleted fires, not when
+    // the tabs.get() that only fetches the title finally answers: an async hop
+    // before the decision moves attribution later in time than the event.
+    const clock = { now: 1000 };
+    const listeners = {};
+    let resolveGet = null;
+    const port = fakePort();
+    const context = await loadBackground(port, {
+      clock,
+      listeners,
+      tabsGet: () =>
+        new Promise((resolve) => {
+          resolveGet = resolve;
+        })
+    });
+
+    await context.dispatchRpc('navigate', { tabId: 7, url: 'https://slow.example/' });
+    clock.now = 2400; // still inside the 1500 ms window opened at 1000
+
+    fire(listeners, 'webNavigation.onCompleted', {
+      frameId: 0,
+      tabId: 7,
+      url: 'https://slow.example/'
+    });
+    clock.now = 9000; // the window expires while the title fetch is in flight
+    resolveGet({ id: 7, url: 'https://slow.example/', title: 'Slow' });
+    await settle();
+
+    const loaded = eventsOfType(port, 'page_loaded');
+    assert.equal(loaded.length, 1);
+    assert.equal(loaded[0].actor, 'agent');
+  });
+
+  test('tab_activated stays the agent\'s when the title fetch outlives the window', async () => {
+    const clock = { now: 1000 };
+    const listeners = {};
+    let resolveGet = null;
+    const port = fakePort();
+    const context = await loadBackground(port, {
+      clock,
+      listeners,
+      tabsGet: () =>
+        new Promise((resolve) => {
+          resolveGet = resolve;
+        })
+    });
+
+    await context.dispatchRpc('activateTab', { tabId: 7 });
+    clock.now = 2400;
+
+    fire(listeners, 'tabs.onActivated', { tabId: 7, windowId: 10 });
+    clock.now = 9000;
+    resolveGet({ id: 7, url: 'https://a.example/', title: 'A' });
+    await settle();
+
+    const activated = eventsOfType(port, 'tab_activated');
+    assert.equal(activated.length, 1);
+    assert.equal(activated[0].actor, 'agent');
+  });
+
+  test('a slow load inherits the actor of the navigation that started it', async () => {
+    // A cross-origin load can take many seconds. The commit is inside the agent
+    // window and the completion is not, but both belong to one agent-caused
+    // navigation, so page_loaded must not flip to the user.
+    const clock = { now: 1000 };
+    const listeners = {};
+    const port = fakePort();
+    const context = await loadBackground(port, { clock, listeners });
+
+    await context.dispatchRpc('navigate', { tabId: 7, url: 'https://slow.example/' });
+
+    clock.now = 1100;
+    fire(listeners, 'webNavigation.onCommitted', {
+      frameId: 0,
+      tabId: 7,
+      url: 'https://slow.example/',
+      transitionType: 'link'
+    });
+
+    clock.now = 9000; // far outside the window opened by the RPC
+    fire(listeners, 'webNavigation.onCompleted', {
+      frameId: 0,
+      tabId: 7,
+      url: 'https://slow.example/'
+    });
+    await settle();
+
+    assert.equal(eventsOfType(port, 'navigation')[0].actor, 'agent');
+    assert.equal(eventsOfType(port, 'page_loaded')[0].actor, 'agent');
+  });
+
+  test('a redirect chain keeps every commit of one agent navigation on the agent', async () => {
+    const clock = { now: 1000 };
+    const listeners = {};
+    const port = fakePort();
+    const context = await loadBackground(port, { clock, listeners });
+
+    await context.dispatchRpc('navigate', { tabId: 7, url: 'https://hop1.example/' });
+
+    clock.now = 2000;
+    fire(listeners, 'webNavigation.onCommitted', {
+      frameId: 0,
+      tabId: 7,
+      url: 'https://hop1.example/',
+      transitionType: 'link'
+    });
+    clock.now = 3200; // past the original window, inside the one the commit renewed
+    fire(listeners, 'webNavigation.onCommitted', {
+      frameId: 0,
+      tabId: 7,
+      url: 'https://hop2.example/',
+      transitionType: 'link'
+    });
+    clock.now = 20000;
+    fire(listeners, 'webNavigation.onCompleted', {
+      frameId: 0,
+      tabId: 7,
+      url: 'https://hop2.example/'
+    });
+    await settle();
+
+    for (const e of eventsOfType(port, 'navigation')) assert.equal(e.actor, 'agent');
+    assert.equal(eventsOfType(port, 'page_loaded')[0].actor, 'agent');
+  });
+
+  test('a user navigation after an agent load completes is the user\'s', async () => {
+    // The boundary the chaining must not swallow: carrying an agent load through
+    // to its completion must not carry the next, genuinely human navigation too.
+    const clock = { now: 1000 };
+    const listeners = {};
+    const port = fakePort();
+    const context = await loadBackground(port, { clock, listeners });
+
+    await context.dispatchRpc('navigate', { tabId: 7, url: 'https://slow.example/' });
+    clock.now = 1100;
+    fire(listeners, 'webNavigation.onCommitted', {
+      frameId: 0,
+      tabId: 7,
+      url: 'https://slow.example/',
+      transitionType: 'link'
+    });
+    clock.now = 9000;
+    fire(listeners, 'webNavigation.onCompleted', {
+      frameId: 0,
+      tabId: 7,
+      url: 'https://slow.example/'
+    });
+    await settle();
+
+    clock.now = 30000; // the human clicks a link long after the agent's load ended
+    fire(listeners, 'webNavigation.onCommitted', {
+      frameId: 0,
+      tabId: 7,
+      url: 'https://human.example/',
+      transitionType: 'link'
+    });
+    clock.now = 45000;
+    fire(listeners, 'webNavigation.onCompleted', {
+      frameId: 0,
+      tabId: 7,
+      url: 'https://human.example/'
+    });
+    await settle();
+
+    const navs = eventsOfType(port, 'navigation');
+    const loads = eventsOfType(port, 'page_loaded');
+    assert.equal(navs.length, 2);
+    assert.equal(loads.length, 2);
+    assert.equal(navs[1].actor, 'user', 'the human navigation is not the agent\'s');
+    assert.equal(loads[1].actor, 'user', 'the human load is not the agent\'s');
+  });
+
+  test('a user load with no preceding commit is still the user\'s', async () => {
+    const clock = { now: 1000 };
+    const listeners = {};
+    const port = fakePort();
+    await loadBackground(port, { clock, listeners });
+
+    fire(listeners, 'webNavigation.onCompleted', {
+      frameId: 0,
+      tabId: 3,
+      url: 'https://human.example/'
+    });
+    await settle();
+
+    assert.equal(eventsOfType(port, 'page_loaded')[0].actor, 'user');
   });
 });
 
