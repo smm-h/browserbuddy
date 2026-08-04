@@ -1,59 +1,85 @@
 #!/usr/bin/env node
 /**
- * BrowserBuddy transport spike: end-to-end proof of the native-messaging path.
+ * BrowserBuddy transport spike: end-to-end proof of the native-messaging path,
+ * on Chromium and on Firefox.
  *
  * Nothing here is simulated. The sequence is:
- *   1. install the native-messaging host manifest into a throwaway Chromium
- *      user-data-dir (Chromium reads NativeMessagingHosts/ from there, so the
- *      user's ~/.config/chromium is never touched);
- *   2. launch real Chromium with extension/ loaded and the id pinned by the
- *      manifest "key";
+ *   1. install the native-messaging host manifest somewhere throwaway --
+ *      a scratch Chromium user-data-dir (Chromium reads NativeMessagingHosts/
+ *      from there) or a scratch HOME (Firefox reads
+ *      $HOME/.mozilla/native-messaging-hosts/ from there). The user's real
+ *      ~/.config/chromium and ~/.mozilla are never touched;
+ *   2. launch the real browser with extension/ loaded -- Chromium by
+ *      --load-extension with the id pinned by the manifest "key", Firefox as a
+ *      temporary add-on over the remote debugging protocol, with the gecko id
+ *      the host manifest's allowed_extensions names;
  *   3. the EXTENSION calls connectNative -- the BROWSER spawns the host;
- *   4. the host binds an ephemeral loopback port, serves Streamable-HTTP MCP
- *      behind a per-launch bearer token, and writes mcp-endpoint.json;
+ *   4. the host binds a loopback port, serves Streamable-HTTP MCP behind a
+ *      bearer token, and writes mcp-endpoint.json;
  *   5. this script reads that file and connects a real MCP SDK client to the
  *      url with the token;
  *   6. tool calls travel client -> HTTP -> host -> native pipe -> extension ->
  *      page, and back.
  *
- *   node scripts/spike-nativemsg.mjs [--keep] [--headed] [--idle-probe-sec N]
+ *   node scripts/spike-nativemsg.mjs [--browser chromium|firefox] [--keep]
+ *                                    [--headed] [--idle-probe-sec N]
  *   node scripts/spike-nativemsg.mjs --hard-error-probe
  *
+ *   --browser          which browser to prove (default chromium)
  *   --keep             leave the profile/data dirs for inspection
- *   --headed           skip --headless=new and go straight to xvfb-run
+ *   --headed           Chromium only: skip --headless=new, go to xvfb-run
+ *                      (Firefox always runs headed under xvfb-run when it is
+ *                      available, because headless Firefox does not paint)
  *   --idle-probe-sec   after the checks, sit idle this long and re-call a tool,
- *                      to measure whether the MV3 service worker keeps the
- *                      native port alive (0 disables; default 0)
- *   --hard-error-probe launch with NO host manifest installed and assert that
- *                      the extension reports a precise, actionable error and
- *                      does not quietly fall back to the WebSocket wire
+ *                      to measure whether the background context keeps the
+ *                      native port -- and therefore the host -- alive
+ *                      (0 disables; default 0)
+ *   --hard-error-probe Chromium only: launch with NO host manifest installed
+ *                      and assert that the extension reports a precise,
+ *                      actionable error and does not quietly fall back to the
+ *                      WebSocket wire
  *
  * Exit code is 0 only when every check passes.
  */
 
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { installNativeHost } from './install-native-host.mjs';
+import { writeFirefoxProfile, launchFirefox, installTemporaryAddon } from './firefox-harness.mjs';
 import { HOST_NAME } from '../server/src/host-manifest.js';
 import { ENDPOINT_FILENAME, readEndpointFile } from '../server/src/endpoint-file.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const EXTENSION_DIR = path.join(ROOT, 'extension');
+const CLI_ENTRY = path.join(ROOT, 'server', 'src', 'index.js');
 const TMP_DIR = path.join(ROOT, 'server', 'test', '.tmp');
 const PROFILE_DIR = path.join(TMP_DIR, 'spike-nm-profile');
 const DATA_DIR = path.join(TMP_DIR, 'spike-nm-data');
+/** Firefox keys its native-messaging directory on HOME, so the run gets its own. */
+const FIREFOX_HOME = path.join(TMP_DIR, 'spike-nm-ff-home');
 
 const CHROME_CANDIDATES = ['chromium-browser', 'chromium', 'google-chrome-stable', 'google-chrome'];
+const FIREFOX_CANDIDATES = ['firefox', 'firefox-esr'];
 
 const argv = process.argv.slice(2);
 const KEEP = argv.includes('--keep');
 const HEADED_ONLY = argv.includes('--headed');
 const HARD_ERROR_PROBE = argv.includes('--hard-error-probe');
+const BROWSER = (() => {
+  const i = argv.indexOf('--browser');
+  const value = i >= 0 ? argv[i + 1] : 'chromium';
+  if (value !== 'chromium' && value !== 'firefox') {
+    console.error(`--browser must be "chromium" or "firefox", got ${JSON.stringify(value)}`);
+    process.exit(2);
+  }
+  return value;
+})();
 const IDLE_PROBE_SEC = (() => {
   const i = argv.indexOf('--idle-probe-sec');
   return i >= 0 ? Number(argv[i + 1]) : 0;
@@ -113,12 +139,24 @@ function which(bin) {
   return r.status === 0 && out ? out.split('\n')[0] : null;
 }
 
-function findBrowser() {
-  for (const candidate of CHROME_CANDIDATES) {
+function findBrowser(candidates) {
+  for (const candidate of candidates) {
     const found = which(candidate);
     if (found) return { name: candidate, path: found };
   }
   return null;
+}
+
+/** An unused loopback port for Firefox's debugger server. */
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const s = net.createServer();
+    s.once('error', reject);
+    s.listen(0, '127.0.0.1', () => {
+      const { port } = s.address();
+      s.close(() => resolve(port));
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +208,16 @@ async function poll(fn, timeoutMs = 15000, intervalMs = 500) {
 let browserChild = null;
 const browserOutput = [];
 
+function captureStreams(child) {
+  for (const stream of [child.stdout, child.stderr]) {
+    stream.setEncoding('utf8');
+    stream.on('data', (chunk) => {
+      for (const line of chunk.split('\n')) if (line.trim()) browserOutput.push(line.trim());
+    });
+  }
+  child.on('error', (err) => browserOutput.push(`spawn error: ${err.message}`));
+}
+
 function launchChrome(binary, { headless, xvfb }) {
   const chromeArgs = [
     ...(headless ? ['--headless=new'] : []),
@@ -184,14 +232,37 @@ function launchChrome(binary, { headless, xvfb }) {
   const cmd = xvfb ? 'xvfb-run' : binary;
   const args = xvfb ? ['-a', binary, ...chromeArgs] : chromeArgs;
   const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
-  for (const stream of [child.stdout, child.stderr]) {
-    stream.setEncoding('utf8');
-    stream.on('data', (chunk) => {
-      for (const line of chunk.split('\n')) if (line.trim()) browserOutput.push(line.trim());
-    });
-  }
-  child.on('error', (err) => browserOutput.push(`spawn error: ${err.message}`));
+  captureStreams(child);
   return child;
+}
+
+/**
+ * Firefox cannot be handed an unpacked extension on the command line, so the
+ * add-on goes in over the remote debugging protocol, exactly as web-ext does.
+ * HOME is redirected at the browser process: Firefox resolves
+ * $HOME/.mozilla/native-messaging-hosts/ from the environment, and this run
+ * must find the throwaway manifest rather than anything the user installed.
+ */
+async function startFirefox(binary, { xvfb }) {
+  const rdpPort = await freePort();
+  writeFirefoxProfile(PROFILE_DIR);
+  console.log(`Launching Firefox ${xvfb ? 'headed under xvfb-run' : 'with --headless'} (RDP on ${rdpPort}, HOME=${FIREFOX_HOME}) ...`);
+  browserChild = launchFirefox(binary, {
+    profileDir: PROFILE_DIR,
+    rdpPort,
+    xvfb,
+    env: { HOME: FIREFOX_HOME }
+  });
+  captureStreams(browserChild);
+  const addon = await installTemporaryAddon(rdpPort, EXTENSION_DIR);
+  const id = addon && addon.id ? addon.id : JSON.stringify(addon);
+  console.log(`Temporary add-on installed: ${id}`);
+  record(
+    'Firefox installs extension/ as a temporary add-on under the pinned gecko id',
+    id === 'browserbuddy@localhost',
+    `id=${id}`
+  );
+  return browserChild;
 }
 
 async function stopBrowser() {
@@ -290,13 +361,30 @@ async function runChecks(client, endpoint, pageUrl) {
     record('browser_fill mutates the live DOM', false, err.message);
   }
 
-  try {
-    const shot = await callTool(client, 'browser_screenshot', { tabId });
-    const img = (shot.content ?? []).find((c) => c.type === 'image');
-    const len = img && typeof img.data === 'string' ? img.data.length : 0;
-    record('browser_screenshot returns image bytes over HTTP', Boolean(img) && len > 1000, `base64 length=${len}`);
-  } catch (err) {
-    record('browser_screenshot returns image bytes over HTTP', false, err.message);
+  // Firefox MV3 never treats granted host permissions as capture permission, so
+  // a gesture-less screenshot must fail loudly and name the workaround. That is
+  // the correct behaviour there, and it is asserted rather than skipped.
+  if (BROWSER === 'firefox') {
+    try {
+      const shot = await callTool(client, 'browser_screenshot', { tabId });
+      const text = (shot.content ?? []).map((c) => c.text ?? '').join(' ');
+      record(
+        'browser_screenshot hard-errors on Firefox (activeTab gesture required)',
+        shot.isError === true && /activeTab/i.test(text),
+        `isError=${shot.isError} message=${text.slice(0, 100)}`
+      );
+    } catch (err) {
+      record('browser_screenshot hard-errors on Firefox (activeTab gesture required)', false, err.message);
+    }
+  } else {
+    try {
+      const shot = await callTool(client, 'browser_screenshot', { tabId });
+      const img = (shot.content ?? []).find((c) => c.type === 'image');
+      const len = img && typeof img.data === 'string' ? img.data.length : 0;
+      record('browser_screenshot returns image bytes over HTTP', Boolean(img) && len > 1000, `base64 length=${len}`);
+    } catch (err) {
+      record('browser_screenshot returns image bytes over HTTP', false, err.message);
+    }
   }
 
   // Events flow the other way down the same pipe.
@@ -324,8 +412,32 @@ async function runChecks(client, endpoint, pageUrl) {
     record('the live endpoint refuses an unauthenticated request', false, err.message);
   }
 
+  // The user-facing half of discovery: with a host actually running, the CLI
+  // must hand back a registration that names this endpoint. Run as a real
+  // subprocess, because that is how a user runs it.
+  try {
+    const cc = spawnSync(process.execPath, [CLI_ENTRY, 'client-config', '--data-dir', DATA_DIR], {
+      encoding: 'utf8',
+      timeout: 20000
+    });
+    const printed = cc.stdout ?? '';
+    record(
+      'browserbuddy client-config prints a registration for the live endpoint',
+      cc.status === 0 && printed.includes(endpoint.url) && printed.includes(endpoint.token),
+      `exit=${cc.status} url=${printed.includes(endpoint.url)} token=${printed.includes(endpoint.token)}`
+    );
+  } catch (err) {
+    record('browserbuddy client-config prints a registration for the live endpoint', false, err.message);
+  }
+
   if (IDLE_PROBE_SEC > 0) {
-    console.log(`\nIdling ${IDLE_PROBE_SEC}s to probe MV3 service-worker lifetime ...`);
+    // Two different questions, and only the second one is about the host.
+    // "Does a tool still work?" can be answered yes by a background context
+    // that was torn down and respawned -- the endpoint identity is designed to
+    // survive exactly that. Whether the HOST PROCESS survived is visible only
+    // in the pid, because a teardown kills it and the respawn is a new one.
+    console.log(`\nIdling ${IDLE_PROBE_SEC}s to probe background-context lifetime ...`);
+    const pidBefore = endpoint.pid;
     await sleep(IDLE_PROBE_SEC * 1000);
     try {
       const afterIdle = await callJson(client, 'browser_tabs');
@@ -337,6 +449,12 @@ async function runChecks(client, endpoint, pageUrl) {
     } catch (err) {
       record(`the native port survives ${IDLE_PROBE_SEC}s of idleness`, false, err.message);
     }
+    const after = readEndpointFile(DATA_DIR);
+    record(
+      `the same host process is still serving after ${IDLE_PROBE_SEC}s (no teardown/respawn)`,
+      Boolean(after) && after.pid === pidBefore,
+      after ? `pid ${pidBefore} -> ${after.pid}, url ${after.url}` : 'no live endpoint after idle'
+    );
   }
 }
 
@@ -403,10 +521,39 @@ async function hardErrorProbe(binary) {
   return summarize();
 }
 
+/** Chromium: headless first, then headed under xvfb-run if no host appeared. */
+async function connectViaChromium(binary) {
+  let endpoint = null;
+  if (!HEADED_ONLY) {
+    console.log('Launching Chromium with --headless=new ...');
+    browserChild = launchChrome(binary, { headless: true, xvfb: false });
+    endpoint = await waitForEndpointFile(ENDPOINT_TIMEOUT_MS);
+  }
+  if (!endpoint && which('xvfb-run')) {
+    if (!HEADED_ONLY) {
+      console.log('No endpoint file under --headless=new; retrying headed under xvfb-run.');
+      await stopBrowser();
+      fs.rmSync(path.join(PROFILE_DIR, 'Default'), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } else {
+      console.log('Launching Chromium headed under xvfb-run ...');
+    }
+    browserChild = launchChrome(binary, { headless: false, xvfb: true });
+    endpoint = await waitForEndpointFile(ENDPOINT_TIMEOUT_MS);
+  }
+  return endpoint;
+}
+
+/** Firefox: one launch, headed under Xvfb when available, add-on over RDP. */
+async function connectViaFirefox(binary) {
+  await startFirefox(binary, { xvfb: which('xvfb-run') !== null });
+  return waitForEndpointFile(ENDPOINT_TIMEOUT_MS);
+}
+
 async function main() {
-  const browser = findBrowser();
+  const candidates = BROWSER === 'firefox' ? FIREFOX_CANDIDATES : CHROME_CANDIDATES;
+  const browser = findBrowser(candidates);
   if (!browser) {
-    console.error(`No Chromium binary found. Tried: ${CHROME_CANDIDATES.join(', ')}.`);
+    console.error(`No ${BROWSER} binary found. Tried: ${candidates.join(', ')}.`);
     process.exit(2);
   }
   const version = spawnSync(browser.path, ['--version'], { encoding: 'utf8', timeout: 15000 });
@@ -415,23 +562,29 @@ async function main() {
   fs.mkdirSync(TMP_DIR, { recursive: true });
 
   if (HARD_ERROR_PROBE) {
+    // Chromium-only, and refused rather than faked elsewhere: the probe reads
+    // the extension's own error out of the browser's stderr, and Firefox keeps
+    // extension console output inside the Browser Console instead.
+    if (BROWSER !== 'chromium') {
+      console.error('--hard-error-probe is Chromium-only: Firefox does not surface extension console output on stderr, so the assertion could not be made honestly.');
+      process.exit(2);
+    }
     process.exit((await hardErrorProbe(browser.path)) ? 0 : 1);
   }
 
-  fs.rmSync(PROFILE_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-  fs.rmSync(DATA_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-  fs.mkdirSync(PROFILE_DIR, { recursive: true });
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  for (const dir of [PROFILE_DIR, DATA_DIR, FIREFOX_HOME]) {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    fs.mkdirSync(dir, { recursive: true });
+  }
 
-  const install = installNativeHost({
-    browser: 'chrome',
-    profileDir: PROFILE_DIR,
-    dataDir: DATA_DIR
-  });
+  const install =
+    BROWSER === 'firefox'
+      ? installNativeHost({ browser: 'firefox', homeDir: FIREFOX_HOME, dataDir: DATA_DIR })
+      : installNativeHost({ browser: 'chrome', profileDir: PROFILE_DIR, dataDir: DATA_DIR });
   console.log(`Installed host "${HOST_NAME}" for extension id ${install.extensionId}`);
   console.log(`  manifest: ${install.manifestPath}`);
   console.log(`  launcher: ${install.launcherPath}`);
-  note(`host manifest written only inside the throwaway profile (${install.manifestPath}); no path outside the repo was touched`);
+  note(`host manifest written only inside the throwaway ${BROWSER === 'firefox' ? 'HOME' : 'profile'} (${install.manifestPath}); no path outside the repo was touched`);
 
   const pageServer = await startPageServer();
   console.log(`Test page served at ${pageServer.url}`);
@@ -442,23 +595,8 @@ async function main() {
   let ok = false;
 
   try {
-    let endpoint = null;
-    if (!HEADED_ONLY) {
-      console.log('Launching Chromium with --headless=new ...');
-      browserChild = launchChrome(browser.path, { headless: true, xvfb: false });
-      endpoint = await waitForEndpointFile(ENDPOINT_TIMEOUT_MS);
-    }
-    if (!endpoint && which('xvfb-run')) {
-      if (!HEADED_ONLY) {
-        console.log('No endpoint file under --headless=new; retrying headed under xvfb-run.');
-        await stopBrowser();
-        fs.rmSync(path.join(PROFILE_DIR, 'Default'), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-      } else {
-        console.log('Launching Chromium headed under xvfb-run ...');
-      }
-      browserChild = launchChrome(browser.path, { headless: false, xvfb: true });
-      endpoint = await waitForEndpointFile(ENDPOINT_TIMEOUT_MS);
-    }
+    const endpoint =
+      BROWSER === 'firefox' ? await connectViaFirefox(browser.path) : await connectViaChromium(browser.path);
 
     record('the browser spawned the host, which wrote mcp-endpoint.json', Boolean(endpoint), endpoint ? endpoint.url : 'no endpoint file appeared');
     if (!endpoint) {
@@ -500,10 +638,11 @@ async function main() {
     }
 
     if (!KEEP) {
-      fs.rmSync(PROFILE_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-      fs.rmSync(DATA_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      for (const dir of [PROFILE_DIR, DATA_DIR, FIREFOX_HOME]) {
+        fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      }
     } else {
-      console.log(`\n--keep: left ${PROFILE_DIR} and ${DATA_DIR} in place.`);
+      console.log(`\n--keep: left ${PROFILE_DIR}, ${DATA_DIR} and ${FIREFOX_HOME} in place.`);
     }
     ok = summarize();
   }
