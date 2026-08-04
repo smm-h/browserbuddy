@@ -3,7 +3,7 @@ title: Protocol
 description: "The normative WebSocket contract between the extension and the local hub: framing, handshake, keepalive, the event stream, and the full RPC surface."
 ---
 
-# BrowserBuddy wire protocol (v0.1.0)
+# BrowserBuddy wire protocol
 
 This document specifies the complete protocol between the browser extension and the local hub. It is intended to be sufficient to reimplement either side without reading the other's source. The protocol is browser-agnostic: the same extension code speaks it from Chrome and from Firefox, and the hub cannot tell them apart.
 
@@ -73,7 +73,7 @@ The extension sends, immediately after the socket opens and before any other mes
 | Field | Type | Notes |
 | --- | --- | --- |
 | `kind` | string | `"hello"` |
-| `role` | string | `"extension"`. The only defined role in v0.1.0; reserved for future client types. |
+| `role` | string | `"extension"`. The only defined role; reserved for future client types. |
 | `version` | string | Extension version, semver. |
 
 The hub replies:
@@ -91,7 +91,8 @@ Rules:
 
 - **Hello gating is enforced.** Only the socket that most recently completed `hello` may send other frames. Any frame whose `kind` is not `hello`, arriving on a socket that is not the currently adopted one, is logged to stderr and dropped — it cannot inject an event or settle somebody else's RPC. This applies both to a socket that never said hello and to a socket that was displaced by a newer connection.
 - **At most one extension connection is live at a time.** When a `hello` arrives on a new socket while another extension connection is established, the hub closes the older socket and adopts the new one. This is the defined behaviour, not a race: the newest connection always wins. It makes extension reloads (which produce a new background context and a new socket) resolve deterministically.
-- Version fields are informational in v0.1.0. Neither side refuses a connection on version mismatch.
+- **Both version fields are derived, never written twice.** The extension reports its own `manifest.json` version (`ext.runtime.getManifest().version`); the host reports its `package.json` version (`server/src/version.js`). The examples above show whatever version happened to be current when they were written — the field's contract is "the sender's own version, semver", not a specific value.
+- Version fields are informational. Neither side refuses a connection on version mismatch.
 - On connection loss the extension reconnects on the fixed ladder of §1 and repeats the handshake. Nothing is negotiated or resumed; a reconnect is a fresh session.
 
 ## 3. Keepalive
@@ -127,7 +128,7 @@ Fields of the inner `event` object as sent by the extension:
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `ts` | integer | yes | Epoch milliseconds at which the extension observed the event. |
-| `actor` | string | yes | One of `"user"`, `"agent"`, `"replay"`. Only the first two are ever emitted in v0.1.0; see §6. |
+| `actor` | string | yes | One of `"user"`, `"agent"`, `"replay"`. Only the first two are ever emitted; see §6. |
 | `type` | string | yes | One of the event types in §4.3. A type the hub does not know is recorded, not rejected; see §4.3.1. |
 | `tabId` | integer \| null | yes | Browser tab id. `null` for window-level events with no associated tab. |
 | `url` | string \| null | yes | URL of the tab at the time of the event. `null` when unknown or not applicable. |
@@ -187,7 +188,7 @@ Events are never acknowledged. The hub sends nothing in response to an `event` m
 | `click` | `selector` (string), `text` (string), `tag` (string), `href` (string, optional) | content script | `text` is the element's trimmed visible text, capped at 80 characters; when the element has no text it falls back to its `aria-label`, and then to its `value` — except that a sensitive element (§5) reports `"[REDACTED]"` instead of its value. `tag` is lowercase. `href` present only for anchors with an `href`. |
 | `input` | `selector` (string), `name` (string, optional), `inputType` (string), `label` (string, optional), `value` (string), `redacted` (boolean) | content script | Debounced; see §4.4. `inputType` is the field's lowercased `type` attribute; a `<input>` with no `type` reports `"text"`, and a `<textarea>`/`<select>`/contenteditable reports its tag name. `label` is the resolved human label if one could be found. `value` is `"[REDACTED]"` when `redacted` is true. `redacted` is always present. |
 | `form_submit` | `selector` (string) | content script | Selector of the submitted `<form>`. |
-| `key_command` | `key` (string), `selector` (string) | content script | A meaningful key press. In v0.1.0 the only reported `key` is `"Enter"`, and only from an `<input>` or `<textarea>`. `selector` identifies the focused element. |
+| `key_command` | `key` (string), `selector` (string) | content script | A meaningful key press. The only reported `key` is `"Enter"`, and only from an `<input>` or `<textarea>`. `selector` identifies the focused element. |
 | `scroll` | `y` (number), `maxY` (number), `pct` (number) | content script | Debounced; see §4.4. Only the document's own scroll is reported — scrolling of an inner container is ignored. `y` is scroll offset in pixels, `maxY` the maximum scrollable offset, `pct` the position as a percentage (0–100, and 0 when the page does not scroll). |
 | `copy` | `textPreview` (string) | content script | At most 200 characters of the copied text, never the full contents — and `"[REDACTED]"` when the copy event's target or the focused element is a sensitive field (§5). |
 | `paste` | `textPreview` (string) | content script | At most 200 characters of the pasted text, and `"[REDACTED]"` when the paste target is a sensitive field (§5). |
@@ -202,7 +203,7 @@ The fourteen types above are the **complete known set** for this version, and th
 
 - The event is **stored whole**, `data` untouched. It is never dropped and never an error.
 - The host adds `unknown: true` to the stored event, in the ring buffer and in the JSONL line alike.
-- `browser_observe` renders that marker, so the agent can see that something happened which this host cannot interpret. Absence must be observable: a newer extension's new event type shows up as an unreadable event, not as silence.
+- `browser_observe` renders that marker, so the agent can see that something happened which this host cannot interpret. **Absence must be observable** (ARCHITECTURE.md §9): a newer extension's new event type shows up as an unreadable event, not as silence.
 - The host logs the unrecognised type to stderr **once per type per run**, not once per event.
 - `unknown` is the only field the host adds on this path. It does not rewrite `type`, substitute a fallback type, or route the event anywhere different.
 
@@ -263,7 +264,7 @@ Every event carries `actor`, which is `"user"` for something the human did and `
 
 The actor set is `user`, `agent`, `replay`.
 
-`replay` is **reserved for future deterministic playback of a recorded demonstration and is never emitted in v0.1.0.** It exists in the enumeration now so that nothing else can claim the name and so consumers can already validate against the final set. Concretely:
+`replay` is **reserved for future deterministic playback of a recorded demonstration and is never emitted.** It exists in the enumeration now so that nothing else can claim the name and so consumers can already validate against the final set. Concretely:
 
 - Nothing in the extension or the host produces an event with `actor: "replay"`. Both attribution layers of this section decide between `user` and `agent` only.
 - `browser_observe` accepts `actor: "replay"` and returns an empty event list. It is a valid query, not an error, and it will stay valid when playback lands.
@@ -358,8 +359,8 @@ Rules:
 - The extension must answer every `rpc` exactly once. It must not send an `rpc_result` for an id it was not sent, or answer the same id twice.
 - Requests are correlated by `id` only. Responses may arrive out of order; the hub matches on `id` and must not assume FIFO.
 - The extension never initiates an RPC. The hub never sends an `rpc_result`.
-- Errors are reported as `ok:false` with a message, never as a thrown transport-level failure and never as a partially-successful `result`. There is no error code enumeration in v0.1.0; the string is the contract.
-- **An unimplemented `method` is a hard error, not silence.** The host may be newer than the extension, so it can ask for a method the extension does not have. The extension answers `ok:false` with `Unknown RPC method: <method>` (or `Unknown content RPC method: <method>` when the miss happens in the content script), naming the method exactly so the caller can tell "you asked for something I do not have" apart from "what you asked for failed". The request is never ignored, and the dispatch table is never consulted in a way that lets an inherited object key (`toString`, `constructor`) look like an implemented method.
+- Errors are reported as `ok:false` with a message, never as a thrown transport-level failure and never as a partially-successful `result`. There is no error code enumeration; the string is the contract.
+- **An unimplemented `method` is a hard error, not silence.** This is the RPC half of the **absence must be observable** invariant (ARCHITECTURE.md §9), whose event half is the `unknown: true` marker of §4.3.1: what cannot be done or understood is always named, never dropped. The host may be newer than the extension, so it can ask for a method the extension does not have. The extension answers `ok:false` with `Unknown RPC method: <method>` (or `Unknown content RPC method: <method>` when the miss happens in the content script), naming the method exactly so the caller can tell "you asked for something I do not have" apart from "what you asked for failed". The request is never ignored, and the dispatch table is never consulted in a way that lets an inherited object key (`toString`, `constructor`) look like an implemented method.
 
 Symmetrically, a message whose `kind` the **hub** does not recognise is logged to stderr and ignored — it is not an error and it is not answered (§1.2). The asymmetry is deliberate: an unknown `kind` has no correlation id to fail, while an unknown `method` does and therefore must be failed.
 
@@ -449,5 +450,5 @@ The six page-interaction methods above require a content script in the target ta
 - On the native carrier the size limits are per direction (1 MB out of the host, 128 MB into it, 64 MB per result at the source), and an oversize result fails one call rather than the pipe.
 - On the native carrier the bearer token is stable across host respawns and the port is reclaimed whenever it is free, so a configured MCP endpoint keeps working; a descriptor whose `pid` is dead is no endpoint.
 - Redaction happens in the page, before transmission, for events, reads and demonstrations alike.
-- Every event is attributed to one of `user`, `agent`, `replay`; only the first two are emitted in v0.1.0, and observation defaults to `user`.
+- Every event is attributed to one of `user`, `agent`, `replay`; only the first two are emitted, and observation defaults to `user`.
 - Failures are explicit `ok:false` errors. Nothing is queued, retried, or silently substituted.

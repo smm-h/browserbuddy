@@ -3,7 +3,7 @@ title: Architecture
 description: "How BrowserBuddy is put together: content script, background script and Node hub, how events flow between them, and why it trades control for presence."
 ---
 
-# BrowserBuddy architecture (v0.1.0)
+# BrowserBuddy architecture
 
 This document explains how BrowserBuddy is put together and why. The wire format itself is specified separately in [PROTOCOL.md](PROTOCOL.md); this document covers structure, data flow and design rationale.
 
@@ -164,12 +164,13 @@ Every operation has exactly one strategy. When it does not work, it fails loudly
 - **No silent port relocation.** An occupied port terminates startup. See §3.
 - **Errors carry the reason.** `rpc_result` failures return a message describing what went wrong: which selector matched nothing, that CSP blocked evaluation, that the tab has no content script. The assistant is a capable error handler when it is told the truth, and a poor one when handed a generic failure.
 - **Redaction has no bypass.** There is no flag to disable it, no "trusted page" list. A guardrail with an escape hatch is a guardrail that will be escaped.
+- **Absence must be observable.** Whenever something cannot be done or cannot be understood, the system emits a visible marker or a named error — never a silent gap. An event type the host does not recognise is stored whole with `unknown: true` and rendered by `browser_observe` (PROTOCOL.md §4.3.1); an RPC method the extension does not implement fails by name rather than going unanswered (PROTOCOL.md §8.1). The assistant reasons from what it can see, so a hole it cannot see is worse than an error it can.
 
 The unifying principle: the assistant is an autonomous consumer that will take whatever path is offered. Ambiguity, silent degradation and best-effort behaviour are all worse for it than a clear failure, because a clear failure it can reason about and report, while a silent degradation it will simply build on.
 
 ## 9b. The browser-spawned native-messaging host
 
-§3 describes the v0.1.0 topology: one process that is both the MCP stdio server and the WebSocket hub, launched by the MCP client. The native-messaging carrier (PROTOCOL.md §1.1) inverts who starts what, and that inversion is the whole point.
+§3 describes the WebSocket carrier's topology: one process that is both the MCP stdio server and the WebSocket hub, launched by the MCP client. The native-messaging carrier (PROTOCOL.md §1.1) inverts who starts what, and that inversion is the whole point.
 
 - **The browser starts the server.** `ext.runtime.connectNative()` makes the browser fork the host process and hold its stdio. Nothing has to be installed as a daemon, nothing has to be running before the browser is, and the host's lifetime is exactly the extension's: when the pipe closes, the host exits and deletes its endpoint file.
 - **The host listens because the extension cannot.** An extension may not bind a socket; an ordinary OS process may. So the host — not the extension — is the MCP server, reachable over Streamable HTTP on loopback. The extension stays a pure client of a pipe the browser owns.
@@ -193,7 +194,7 @@ A teardown is heavier here than on the WebSocket carrier: it does not merely dro
 
 The extension distinguishes the two disconnect shapes, because they need different treatment from the user. A host that never came up — `connectNative` threw, or the port disconnected before a single message arrived — is a spawn failure, almost always a missing or misinstalled host manifest: the extension logs the install instructions and raises an error badge that stays up. A pipe that closes after the host has been talking is routine, and gets a neutral "native host disconnected" state while the reconnect ladder runs. Emitting the install error on every teardown, as the first cut did, trains the user to ignore the one message that actually needs acting on.
 
-## 10. Trade-offs accepted in v0.1.0
+## 10. Trade-offs accepted
 
 | Trade-off | Consequence | Why it is accepted |
 | --- | --- | --- |

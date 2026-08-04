@@ -33,9 +33,11 @@ try {
   if (pkg !== manifest) {
     console.error(
       `Version drift: package.json is ${pkg} but extension/manifest.json is ${manifest}.\n` +
-        `Set "version": "${pkg}" in extension/manifest.json. The extension has no build step, ` +
-        'so its manifest version is the one literal the release bump does not reach: bump it in ' +
-        'the same commit that prepares the release.'
+        `Set "version": "${pkg}" in extension/manifest.json. The extension has no build step, so ` +
+        'its manifest version is the one literal the release bump does not reach; the two must ' +
+        'move to a new version together, in the release commit itself. This check runs in the ' +
+        'release preflight, before rlsbl writes the new version, so a hand-bump in an earlier ' +
+        'commit lands here instead of shipping.'
     );
     process.exit(1);
   }

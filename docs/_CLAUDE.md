@@ -30,10 +30,12 @@ BrowserBuddy :-: var key="project.version" is a shared browser for you and your 
   - `store.js` — event store: 1000-entry ring buffer, per-UTC-day JSONL append, `query` and `waitFor` (the lockstep primitive).
   - `mcp.js` — the MCP tool surface: 18 acting, 3 observing, 4 learning tools, with zod schemas.
   - `demos.js` — demonstration recorder: captures user events while recording, cleans them into a replayable step list, persists one JSON file per demo.
+  - `version.js` — the one place the server learns its version: it reads `package.json`, which is what the release bump edits. `cli.js`, `mcp.js`, `hub.js` and `native-hub.js` all import it instead of holding a literal.
 - `server/test/` — `node --test` suite, including a fake extension driver (`fake-extension.js`) for hub/MCP tests and a fake browser (`fake-native-extension.js`) that spawns the real host over real pipes.
 - `scripts/e2e-smoke.mjs` — live end-to-end smoke test of the WebSocket carrier against a real browser with the real extension.
 - `scripts/spike-nativemsg.mjs` — live end-to-end proof of the native-messaging carrier on both browsers: installs the host manifest into a throwaway Chromium profile or a throwaway HOME, lets the browser spawn the host, then drives the MCP tools over HTTP. `--browser firefox` installs `extension/` as a temporary add-on over the remote debugging protocol.
 - `scripts/firefox-harness.mjs` — the shared Firefox half of both live harnesses: profile prefs (including the `originControls.grantByDefault` that stands in for the human permission grant), the launch, and the RDP client that installs a temporary add-on.
+- `scripts/check-manifest-version.mjs` — the version-drift guardrail: fails when `extension/manifest.json` and `package.json` disagree. Registered as the `manifest-version-lockstep` external check in `.rlsbl/config.json` (tag `preflight`), so it runs under `rlsbl check --all` and blocks a release.
 - `scripts/install-native-host.mjs` — development CLI over `server/src/install-host.js`: writes the host manifest and launcher for a named Chromium user-data-dir or Firefox HOME. End users run `browserbuddy install-host --browser chrome|firefox` instead.
 - `docs/` — `PROTOCOL.md` (normative wire contract) and `ARCHITECTURE.md` (components, data flow, rationale), both hand-maintained; `_README.md` and `_CLAUDE.md` are the selfdoc templates for the root files.
 - `pypi/` — PyPI name-reservation placeholder package only. Not the product; do not grow it.
@@ -51,6 +53,8 @@ BrowserBuddy :-: var key="project.version" is a shared browser for you and your 
 - **Actor attribution is sacred.** Every event carries an `actor` of `user` or `agent`. Agent-driven actions must never be recorded as user events: it would corrupt `browser_wait_for_user` (the agent would wake itself), poison demonstrations, and lie to `browser_observe`.
 - **`docs/PROTOCOL.md` is the normative wire contract.** Any change to message shapes, event types, RPC names or error semantics updates the protocol doc in the same change — the doc is the contract, the code follows it.
 - **The extension binds `ext`, never `chrome`.** `const ext = typeof browser !== 'undefined' ? browser : chrome` gives one promise-based API on both browsers. Redeclaring `chrome` at the top level of a Chrome service worker kills the whole script; never shadow it.
+- **Absence must be observable.** Whenever something cannot be done or cannot be understood, it surfaces as a visible marker or a named error, never as a silent gap: an unrecognised event type is stored whole with `unknown: true` and rendered by `browser_observe`, and an unimplemented RPC method fails by name. See ARCHITECTURE.md §9.
+- **One version literal, and it is `extension/manifest.json`.** The server reads its version from `package.json` via `server/src/version.js`; `background.js` reads its own from `ext.runtime.getManifest().version`. The manifest's own number is the only literal, because the extension has no build step — `scripts/check-manifest-version.mjs` hard-fails the release preflight if it drifts from `package.json`. Never write a version string anywhere else.
 - **No build step for the extension.** `extension/` is loaded as-is by both browsers. No bundler, no transpiler, no generated files — plain ES5-compatible-loading scripts that run directly.
 
 ## Verification
@@ -66,6 +70,8 @@ BrowserBuddy :-: var key="project.version" is a shared browser for you and your 
 ## Releases
 
 Releases go through rlsbl (`.rlsbl/`, JSONL changelog in `.rlsbl/changes/`). Every commit needs a changelog entry (`rlsbl changelog add`), and the release itself is `rlsbl release run`. Never `git push` by hand and never publish to npm or PyPI manually.
+
+**`extension/manifest.json` holds the one version literal nothing derives.** rlsbl bumps `package.json`, `pypi/pyproject.toml` and `selfdoc.json`; it does not know about the extension manifest, and the manifest cannot read its version from anywhere because the extension has no build step. `scripts/check-manifest-version.mjs` — registered as the `manifest-version-lockstep` external check, tag `preflight` — hard-fails any `rlsbl check` or release preflight where the manifest and `package.json` disagree, so the drift is always loud rather than shipped. The two therefore have to reach the new version together, in the release commit itself: the preflight check runs *before* rlsbl writes the new version, so bumping the manifest by hand in an earlier commit aborts the release rather than sneaking through.
 
 ## Documentation
 
