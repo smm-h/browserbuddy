@@ -11,10 +11,12 @@ order: 91
 
 # browserbuddy CLI Reference
 
-Share one browser between you and your coding agent: an MCP stdio server plus the WebSocket hub the BrowserBuddy extension connects to.
+Share one browser between you and your coding agent. install-host sets up the native-messaging host the extension spawns by default, client-config prints the MCP registration for the host once the browser has spawned it, and serve runs the MCP stdio server with the WebSocket hub for builds that use the WebSocket carrier instead.
 
 Version: :-: var key="project.version"
 
 ## Commands
 
-- [serve](cli-serve.html) -- Run the MCP stdio server and the WebSocket hub the browser extension connects to.
+- [serve](cli-serve.html) -- Run the MCP stdio server and the WebSocket hub. Only the WebSocket carrier uses this: with the extension's default native transport the browser spawns the host itself (see install-host).
+- [install-host](cli-install-host.html) -- Install the native-messaging host manifest so the browser can spawn the BrowserBuddy host (which serves MCP over loopback HTTP).
+- [client-config](cli-client-config.html) -- Print the MCP client registration for the running native host: the exact `claude mcp add` command, and the equivalent config block. Reads the endpoint the host published once the browser spawned it.

@@ -22,9 +22,28 @@ Most browser tooling for assistants (chrome-devtools-mcp, Playwright MCP, and an
 
 ## Setup
 
-> **Working copy note.** `extension/background.js` currently defaults `TRANSPORT` to `'native'`: the extension asks the browser to spawn a native-messaging host, which serves MCP over a loopback HTTP endpoint of its own, instead of dialling `browserbuddy serve`. The setup below describes the WebSocket path, which is still fully working but must be selected explicitly by setting `const TRANSPORT = 'websocket';` in `extension/background.js`. See `docs/PROTOCOL.md` §1 for both carriers and `scripts/spike-nativemsg.mjs` for the native path end to end.
+**The browser starts the server.** The extension asks the browser to spawn a *native-messaging host* — an ordinary local process — and that host is what serves MCP, over a loopback HTTP endpoint it publishes itself. Nothing runs as a daemon, nothing has to be started in the right order, and there is no port to agree on in advance: the host picks one and tells you.
 
-### 1. Load the extension
+That inverts the usual MCP setup, so read the four steps in order. Host installation is **Linux only** in this version and refuses other platforms outright rather than writing files where no browser looks.
+
+### 1. Install the dependencies
+
+```
+npm install
+```
+
+Node.js 22 or newer is required.
+
+### 2. Install the native-messaging host
+
+```
+browserbuddy install-host --browser chrome     # the whole Chromium family
+browserbuddy install-host --browser firefox
+```
+
+This writes the host manifest where that browser looks for it — `<user-data-dir>/NativeMessagingHosts/` for Chrome, `~/.mozilla/native-messaging-hosts/` for Firefox — plus the small launcher its `path` points at. It starts nothing: it only makes the host *findable*. Add `--data-dir <path>` to put event logs, demonstrations and the endpoint files somewhere other than `server/data`; if you do, pass the same `--data-dir` to `client-config` in step 4.
+
+### 3. Load the extension
 
 One `extension/` directory serves both browsers; the manifest declares both a service worker (Chrome) and an event page (Firefox), and each browser picks its own.
 
@@ -42,48 +61,37 @@ One `extension/` directory serves both browsers; the manifest declares both a se
 
 A temporary add-on is removed when Firefox exits; reload it after a restart. Firefox older than 128 refuses to install the extension (`strict_min_version` — main-world script injection, which `browser_eval` needs, does not exist before 128).
 
-The toolbar badge shows a green `●` while the extension is connected to the hub, and is cleared when it is not.
+Loading the extension is what spawns the host. The toolbar badge shows a green `●` once the connection is up; a red badge with install instructions means the browser could not find the host, i.e. step 2 was skipped or installed for the wrong profile.
 
-The hub URL is a **hardcoded constant** in `extension/background.js`:
-
-```js
-const WS_URL = 'ws://127.0.0.1:8590/ws';
-```
-
-There is no options page and no configuration UI. If you run the server on another port, edit that line and reload the extension.
-
-### 2. Install the dependencies
+### 4. Attach Claude Code
 
 ```
-npm install
+browserbuddy client-config
 ```
 
-Node.js 22 or newer is required.
-
-### 3. Register the MCP server with Claude Code
+The host published its url and bearer token in `server/data/mcp-endpoint.json` when the browser spawned it. `client-config` reads that descriptor and prints the exact registration, ready to paste:
 
 ```
-claude mcp add browserbuddy -- node /absolute/path/to/browserbuddy/server/src/index.js serve
+claude mcp add --transport http browserbuddy http://127.0.0.1:PORT/mcp --header "Authorization: Bearer TOKEN"
 ```
 
-The CLI is a single command:
+It also prints the equivalent `mcpServers` block for MCP clients configured by hand. Pass `--apply` to run the `claude mcp add` for you instead of printing it — off by default, because asking where the endpoint is should not rewrite your config. Add `--scope user` to register it for every project rather than the current one. Restart Claude Code (or run `/mcp` in a live session) afterwards.
+
+If no host is running, `client-config` fails with the ordered procedure above rather than printing something that cannot work; the host only exists while the browser is running it.
+
+**Register once.** The browser tears its background context down routinely, which kills the host and respawns it — but the host persists its identity and comes back on the same port with the same token, so the registration you made keeps working. See *Endpoint stability* in `docs/PROTOCOL.md` §1.1.
+
+The CLI's commands:
 
 | Command | Description |
 | --- | --- |
-| `serve` | Run the MCP stdio server and the WebSocket hub the browser extension connects to. |
+| `serve` | Run the MCP stdio server and the WebSocket hub. Only the WebSocket carrier uses this: with the extension's default native transport the browser spawns the host itself (see install-host). |
+| `install-host` | Install the native-messaging host manifest so the browser can spawn the BrowserBuddy host (which serves MCP over loopback HTTP). |
+| `client-config` | Print the MCP client registration for the running native host: the exact `claude mcp add` command, and the equivalent config block. Reads the endpoint the host published once the browser spawned it. |
 
-`serve` accepts two flags:
+### The WebSocket carrier
 
-| Flag | Default | Purpose |
-| --- | --- | --- |
-| `--port <n>` | `8590` | WebSocket hub port on `127.0.0.1`. If you change it, edit `WS_URL` in `extension/background.js` to match and reload the extension. |
-| `--data-dir <path>` | `server/data` | Where event logs and demonstrations are written. |
-
-### 4. Ordering does not matter
-
-The server process runs only while a Claude Code session has the MCP server loaded; it exits with that session. The extension reconnects on its own on a fixed 1s/2s/5s/10s retry ladder, with a 30-second alarm as a backstop, so you can start the browser first, Claude Code first, or restart either one mid-session. When the hub is down, no events are recorded and every acting tool fails loudly rather than pretending to work.
-
-If port 8590 is already occupied, the server exits immediately instead of picking another port — a silently relocated hub would leave the extension connected to nothing.
+Before the native-messaging host, the server was a long-lived process started by the MCP client (`claude mcp add browserbuddy -- node …/server/src/index.js serve`), with the extension dialling it over a WebSocket on a fixed port. That carrier still works and `browserbuddy serve` still runs it, but it must now be selected explicitly by setting `const TRANSPORT = 'websocket';` in `extension/background.js` and reloading the extension; `WS_URL` in the same file is the hardcoded hub address, and `serve --port` must match it. `docs/PROTOCOL.md` §1 specifies both carriers.
 
 ## Tool catalog
 
@@ -183,7 +191,7 @@ What is stored, and where:
 | Recent events | in-process ring buffer (1000 entries) | memory only |
 | Demonstrations | `server/data/demos/` | one JSON file per demonstration |
 
-Everything is plain text on your local disk. Nothing is sent anywhere: the hub binds to `127.0.0.1` only, and the only data that leaves your machine is whatever the assistant itself reads into your Claude Code conversation — which is exactly the data you asked it to look at. Events flow only while the hub is running; with no Claude Code session loaded, the extension is a disconnected no-op that records nothing.
+Everything is plain text on your local disk. Nothing is sent anywhere: both carriers bind to `127.0.0.1` only — and the native host's MCP endpoint additionally requires the bearer token from `mcp-endpoint.json` (mode `0600`) and emits no CORS headers, so a web page cannot reach it even if it learned the port. The only data that leaves your machine is whatever the assistant itself reads into your Claude Code conversation — which is exactly the data you asked it to look at. Events flow only while the browser is running the host; with the browser closed, nothing is recorded.
 
 Copy and paste events from ordinary page content keep only a preview of at most 200 characters, not the full clipboard contents.
 
@@ -195,9 +203,10 @@ Accepted trade-offs in version 0.1.0:
 - **`browser_eval` is subject to page CSP.** A strict Content-Security-Policy can block main-world evaluation. This is reported as a hard error, not silently worked around.
 - **Screenshots capture the visible tab only.** The browser can only capture what is on screen, so `browser_screenshot` activates the target tab first. Expect your foreground tab to change.
 - **No browser-internal pages.** Content scripts cannot run on `chrome://` or `about:` pages, the Chrome Web Store, addons.mozilla.org, or other extensions' pages, so nothing there can be observed or acted on.
-- **Firefox suspends the background at idle.** Firefox does not count WebSocket traffic as background activity, so at idle it suspends the extension's event page and the 30-second alarm revives it — roughly one reconnect per minute, during which acting tools fail with the not-connected error (retry succeeds within ~30 s) and observed events are buffered, not lost. Chrome keeps the socket's service worker alive continuously.
-- **One browser profile at a time.** The hub accepts a single extension connection; a new `hello` closes the previous one. This also means Chrome and Firefox cannot be connected simultaneously.
-- **Port 8590 must be free.** The server exits rather than falling back to another port.
+- **On the WebSocket carrier, Firefox suspends the background at idle.** Firefox does not count WebSocket traffic as background activity, so at idle it suspends the extension's event page and the 30-second alarm revives it — roughly one reconnect per minute, during which acting tools fail with the not-connected error (retry succeeds within ~30 s) and observed events are buffered, not lost. Chrome keeps the socket's service worker alive continuously. This does not reproduce on the default native-messaging carrier: measured on Firefox 148, three minutes of idle left the same host process serving, uninterrupted.
+- **One browser profile at a time.** A single extension connection is accepted; a new `hello` closes the previous one. This also means Chrome and Firefox cannot be connected simultaneously.
+- **Host installation is Linux only.** `browserbuddy install-host` refuses macOS and Windows rather than writing the manifest where no browser looks; the layouts are not implemented yet.
+- **On the WebSocket carrier, port 8590 must be free.** `browserbuddy serve` exits rather than falling back to another port. The native-messaging host has no such constraint: it advertises whatever port it bound, and only a *live* listener on its remembered port makes it move.
 
 <div class="callout callout-warning">
 <p class="callout-title">Warning</p>
@@ -214,12 +223,14 @@ Accepted trade-offs in version 0.1.0:
 - `package.json` — the npm package root (`browserbuddy`); `npm install` and `npm test` run from here
 - `server/` — Node.js process, MCP stdio server and WebSocket hub in one
   - `src/index.js` — `browserbuddy` bin entry point
-  - `src/cli.js` — strictcli command definition (`serve`) and server startup
+  - `src/cli.js` — strictcli command definitions (`serve`, `install-host`, `client-config`) and server startup
+  - `src/client-config.js` — the `client-config` command: turns the host's published endpoint into an MCP client registration
   - `src/native-host-bin.js` — the executable the browser spawns for the native-messaging carrier
   - `data/` — runtime state (gitignored)
     - `events/` — JSONL event logs
     - `demos/` — recorded demonstrations
     - `mcp-endpoint.json` — live url + bearer token published by the native-messaging host
+    - `endpoint-state.json` — the token and port the next host respawn reuses, so a configured MCP endpoint keeps working
 - `docs/`
   - `ARCHITECTURE.md` — components, data flow, and the reasoning behind the design
   - `PROTOCOL.md` — the complete extension/hub wire protocol

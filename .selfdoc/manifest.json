@@ -18,8 +18,18 @@
       "type": "doc"
     },
     {
+      "path": "cli-client-config.md",
+      "title": "browserbuddy client-config",
+      "type": "doc"
+    },
+    {
       "path": "cli-index.md",
       "title": "browserbuddy CLI Reference",
+      "type": "doc"
+    },
+    {
+      "path": "cli-install-host.md",
+      "title": "browserbuddy install-host",
       "type": "doc"
     },
     {
@@ -58,6 +68,11 @@
       "type": "doc"
     },
     {
+      "path": "server-src-client-config.md",
+      "title": "server/src/client-config",
+      "type": "doc"
+    },
+    {
       "path": "server-src-demos.md",
       "title": "server/src/demos",
       "type": "doc"
@@ -85,6 +100,11 @@
     {
       "path": "server-src-index.md",
       "title": "server/src/index",
+      "type": "doc"
+    },
+    {
+      "path": "server-src-install-host.md",
+      "title": "server/src/install-host",
       "type": "doc"
     },
     {
@@ -121,8 +141,13 @@
       "path": "server-src-store.md",
       "title": "server/src/store",
       "type": "doc"
+    },
+    {
+      "path": "server-src-version.md",
+      "title": "server/src/version",
+      "type": "doc"
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-03T20:12:11.410606+00:00"
+  "last_gen": "2026-08-04T09:04:58.333759+00:00"
 }

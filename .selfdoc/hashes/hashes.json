@@ -40,8 +40,7 @@
   },
   "extension-transport-native.md": {
     "content": "8f0d2104752857fdc6515668dcad96cc63236910dc729ceff06966346c7c4467",
-    "description": "215f9064dedfcf00ced1250fa569516f8cb49df5ecf213251693e3a8f1f95eed",
-    "seed_hash": "d92c3d679495d5dd2ebf65df6f88a4b9f8e427996b69169ad8eba1b79c789e3a"
+    "description": "215f9064dedfcf00ced1250fa569516f8cb49df5ecf213251693e3a8f1f95eed"
   },
   "gen-index.md": {
     "content": "023b01763f579cf2b4cbec0a6d61f172b20cd69c4c4eb90a1a2342efffc7d45a",
@@ -57,8 +56,7 @@
   },
   "server-src-client-config.md": {
     "content": "d9588e3308185ada9e99a5b7f60655806a6195e868a957fd86b535c8738e3875",
-    "description": "11517f1028782e858362013fef461da07295a0ec42cbda83c49ced8f0c42a256",
-    "seed_hash": "45869ce9f890d377495b5d0cfc3811b310517bc7be8c4ce1846ee9ee8d9dafcb"
+    "description": "11517f1028782e858362013fef461da07295a0ec42cbda83c49ced8f0c42a256"
   },
   "server-src-demos.md": {
     "content": "5a9c4d9fee9acab464f72af6947feacb213dd1958a634fddf4762c568cdfa1ba",
@@ -66,18 +64,15 @@
   },
   "server-src-endpoint-file.md": {
     "content": "944fae1344d6ff148548d3b9dd591efb0d23c1830360184ca60f45e91b532211",
-    "description": "92ee291394e78c6304185bb441731932f27382bc0b9b0839bc043c3456cd9261",
-    "seed_hash": "b6db1a36651b080211f9e2e65793e2befa592da0720df77cf04ba28162afbdf6"
+    "description": "92ee291394e78c6304185bb441731932f27382bc0b9b0839bc043c3456cd9261"
   },
   "server-src-host-manifest.md": {
     "content": "ca162545372fe3626830564092b9e46b36ccc303289e6527e8b1be6c71a62fbe",
-    "description": "04cde1e729d78d337d0cb412f5c64a01fe5530de6c36b5e419dc014260db573a",
-    "seed_hash": "0abdfcffa80d32b7b0c3dbb8db67c878e6cd8885128c7f928ee2f648a7a1f760"
+    "description": "04cde1e729d78d337d0cb412f5c64a01fe5530de6c36b5e419dc014260db573a"
   },
   "server-src-http-mcp.md": {
     "content": "66e9b9babff73a73a0589f89c119718c587c3b8f1c2d612fdf633718fd7b4b7f",
-    "description": "3129919bab5b6f6328097ab8cdeefe187edee6b615a3816ba1ddab82dd1fbbd9",
-    "seed_hash": "fefd1ba195d7536942900fdda5c30d89c145b78e5a5c73b388b86f045b5e91bd"
+    "description": "3129919bab5b6f6328097ab8cdeefe187edee6b615a3816ba1ddab82dd1fbbd9"
   },
   "server-src-hub.md": {
     "content": "97aa7922c1e392500406b74c75ca605d4ff7676ca1af43c6297a373574588e4a",
@@ -89,8 +84,7 @@
   },
   "server-src-install-host.md": {
     "content": "c33caf83c4fe6918d39deeebc409e82a538195358955399725dd84d2754d98af",
-    "description": "7d668492ba936ee2d558ed948f16b8d90f85e4b31798554e1d6017357d662d39",
-    "seed_hash": "5b660553c1121481313bd6be2643f51e53b0a874eac4dd47a0d95cf78f4ef305"
+    "description": "7d668492ba936ee2d558ed948f16b8d90f85e4b31798554e1d6017357d662d39"
   },
   "server-src-mcp.md": {
     "content": "8d54f360346a4d0232a35a253ab52c0a21ed3e35a7f1b0d959d6dfc18b43816d",
@@ -98,28 +92,23 @@
   },
   "server-src-native-host-bin.md": {
     "content": "1ff9752669449d38fdf8e6e89baa88a186ed9b12d0cea43995a8b16421996ed0",
-    "description": "ba0f8ad621f9519e37e5f58663884cb048c7531fb5e442d84592fb875682d06d",
-    "seed_hash": "c503569f0522a66b5689d65ef9ae728b6ba9457f9020811a9ca2b265853c47d0"
+    "description": "ba0f8ad621f9519e37e5f58663884cb048c7531fb5e442d84592fb875682d06d"
   },
   "server-src-native-host.md": {
     "content": "c102e4015be9809077c833c0f9b210e46a7b01e30d28193983f0482b38040e00",
-    "description": "4cc7f843360b259b8be45d08dfa2b07629113c0bc38388e7d9bef65554c7f90d",
-    "seed_hash": "edeb3304ef61073290031476abb2d00e9f67c6de011c1e2358fb8d74bd36444a"
+    "description": "4cc7f843360b259b8be45d08dfa2b07629113c0bc38388e7d9bef65554c7f90d"
   },
   "server-src-native-hub.md": {
     "content": "6b057a1b5ebf869a643cbe865281c04d975364f8d9b0250b7583b0dfcb1a2048",
-    "description": "88cc584fafe8a580a767543c5fd280e19992292f2ed964e2da9ca88e69d26338",
-    "seed_hash": "b6a6130e11620923d7d14f11f2a659f552b713ce7ba2ea0012e57aac644399bd"
+    "description": "88cc584fafe8a580a767543c5fd280e19992292f2ed964e2da9ca88e69d26338"
   },
   "server-src-native-messaging.md": {
     "content": "65f44676eaa0c5ebf04c4c3c017ee450488f3de00ff4c0eb8997dacd4af173bf",
-    "description": "d75e1da3abc3e51a9c80ea90d3a7314d4d916262db778cd7ef840e1dd22fcc2a",
-    "seed_hash": "f8478df841911a2b2be2057d55d9dc0f7b2959d9aaebaacf77476af7850a03f9"
+    "description": "d75e1da3abc3e51a9c80ea90d3a7314d4d916262db778cd7ef840e1dd22fcc2a"
   },
   "server-src-rpc-peer.md": {
     "content": "6abae84105d6db0090eee0edcd4b8d63cb1cb390a3726c5db884eb2ab6a11749",
-    "description": "e79f47fd395180b67bb0d5f85baa741fad578f59bc486525d9d53cb56475acd9",
-    "seed_hash": "8f5c665ffc4aa60cacf4b9ca51b152a605c3d416bf9ff601be237d1f5075c8c9"
+    "description": "e79f47fd395180b67bb0d5f85baa741fad578f59bc486525d9d53cb56475acd9"
   },
   "server-src-store.md": {
     "content": "4b5495a47cf51283c84ff53948e8a6c574666532b98ddd27dc91e34ced93c72d",
@@ -127,7 +116,6 @@
   },
   "server-src-version.md": {
     "content": "d5abebb773912e1990383ff2f0902068ba1997876e57650910774e7d4ade349a",
-    "description": "910ef72780561dc203ead0e30e4c7ab536df356995895850197cbcf697729d5b",
-    "seed_hash": "cd24daf14ba6d8bc169196bf9d28d3721676b8823ff49a03c04b46c3207cb87b"
+    "description": "910ef72780561dc203ead0e30e4c7ab536df356995895850197cbcf697729d5b"
   }
 }

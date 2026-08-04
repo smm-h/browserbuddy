@@ -1,6 +1,6 @@
 ---
 title: API Reference
-description: "API reference for every BrowserBuddy module: the Node server (CLI, hub, event store, demo recorder, MCP tools) and the two extension scripts."
+description: "API reference for every BrowserBuddy module: the native-messaging host and its transport, the MCP tools, the event store and demo recorder, and the extension's three scripts."
 generated: true
 nav_group: "API Reference"
 nav_order: 0
@@ -14,12 +14,14 @@ order: 90
 - [extension/content](extension-content.html)
 - [extension/transport-native](extension-transport-native.html)
 - [server/src/cli](server-src-cli.html)
+- [server/src/client-config](server-src-client-config.html)
 - [server/src/demos](server-src-demos.html)
 - [server/src/endpoint-file](server-src-endpoint-file.html)
 - [server/src/host-manifest](server-src-host-manifest.html)
 - [server/src/http-mcp](server-src-http-mcp.html)
 - [server/src/hub](server-src-hub.html)
 - [server/src/index](server-src-index.html)
+- [server/src/install-host](server-src-install-host.html)
 - [server/src/mcp](server-src-mcp.html)
 - [server/src/native-host](server-src-native-host.html)
 - [server/src/native-host-bin](server-src-native-host-bin.html)
@@ -27,3 +29,4 @@ order: 90
 - [server/src/native-messaging](server-src-native-messaging.html)
 - [server/src/rpc-peer](server-src-rpc-peer.html)
 - [server/src/store](server-src-store.html)
+- [server/src/version](server-src-version.html)

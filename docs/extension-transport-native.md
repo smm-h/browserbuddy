@@ -1,8 +1,7 @@
 ---
 title: extension/transport-native
-description: "API reference for the extension/transport-native module — auto-generated documentation covering public functions, classes, and type signatures."
+description: "The extension's half of the native-messaging carrier: connectNative asks the browser to spawn the host, and a host that cannot be spawned is reported, never worked around."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 3
 ---
