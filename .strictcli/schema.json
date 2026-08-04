@@ -49,7 +49,7 @@
   "project_id": "browserbuddy",
   "name": "browserbuddy",
   "version": "0.1.0",
-  "help": "Share one browser between you and your coding agent. install-host sets up the native-messaging host the extension spawns by default; serve runs the MCP stdio server with the WebSocket hub for builds that use the WebSocket carrier instead.",
+  "help": "Share one browser between you and your coding agent. install-host sets up the native-messaging host the extension spawns by default, client-config prints the MCP registration for the host once the browser has spawned it, and serve runs the MCP stdio server with the WebSocket hub for builds that use the WebSocket carrier instead.",
   "commands": {
     "serve": {
       "name": "serve",
@@ -95,6 +95,24 @@
           "name": "data-dir",
           "type": "str",
           "help": "Directory the installed host will use for event logs, demonstrations and its endpoint files. Defaults to server/data inside the installed package."
+        }
+      ]
+    },
+    "client-config": {
+      "name": "client-config",
+      "help": "Print the MCP client registration for the running native host: the exact `claude mcp add` command, and the equivalent config block. Reads the endpoint the host published once the browser spawned it.",
+      "flags": [
+        {
+          "name": "data-dir",
+          "type": "str",
+          "help": "Directory the host writes its endpoint files to -- the same --data-dir the host was installed with. Defaults to server/data inside the installed package."
+        },
+        {
+          "name": "apply",
+          "type": "bool",
+          "help": "Run `claude mcp add` instead of only printing it. Off by default: registering rewrites your Claude Code config, which should be a choice, not a side effect of asking where the endpoint is.",
+          "default": false,
+          "negatable": true
         }
       ]
     }

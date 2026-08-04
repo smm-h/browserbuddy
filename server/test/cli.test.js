@@ -2,8 +2,11 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { createCli, DEFAULT_DATA_DIR, VERSION } from '../src/cli.js';
 import { chromeExtensionIdFromKey, HOST_NAME } from '../src/host-manifest.js';
+import { writeEndpointFile } from '../src/endpoint-file.js';
+import { claudeAddArgv, CLIENT_NAME } from '../src/client-config.js';
 import { makeTmpDir, removeTmpDir, SERVER_ROOT } from './helpers.js';
 
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
@@ -144,6 +147,94 @@ describe('CLI', () => {
     } finally {
       removeTmpDir(tmp);
     }
+  });
+
+  test('client-config --help documents both flags and the --apply default', async () => {
+    const r = await createCli().test(['client-config', '--help']);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /--data-dir/);
+    assert.match(r.stdout, /--apply/);
+    // Registering must never be the default: it rewrites the user's config.
+    assert.match(r.stdout, /default: false/);
+    assert.match(r.stdout, /server\/data/);
+    assert.ok(
+      !r.stdout.includes(DEFAULT_DATA_DIR),
+      'client-config --help must not embed the absolute default data dir'
+    );
+  });
+
+  test('client-config prints the claude registration for a live endpoint', async () => {
+    const tmp = makeTmpDir('client-config-live');
+    try {
+      const url = 'http://127.0.0.1:45671/mcp';
+      const token = 'test-token-0123456789abcdef';
+      // process.pid is alive by definition, so the descriptor reads as live.
+      writeEndpointFile(tmp, { url, token, pid: process.pid });
+
+      const r = await createCli().test(['client-config', '--data-dir', tmp]);
+      assert.equal(r.exitCode, 0);
+      assert.equal(r.stderr, '');
+      assert.match(r.stdout, /claude mcp add --transport http browserbuddy /);
+      assert.ok(r.stdout.includes(url), 'the printed command must carry the live url');
+      assert.ok(r.stdout.includes(`Authorization: Bearer ${token}`), 'the printed command must carry the token');
+      // The manual block must be valid JSON a user can paste, not prose.
+      const block = r.stdout.slice(r.stdout.indexOf('{'), r.stdout.lastIndexOf('}') + 1);
+      const parsed = JSON.parse(block);
+      assert.equal(parsed.mcpServers[CLIENT_NAME].url, url);
+      assert.equal(parsed.mcpServers[CLIENT_NAME].headers.Authorization, `Bearer ${token}`);
+    } finally {
+      removeTmpDir(tmp);
+    }
+  });
+
+  test('client-config hard-errors with the whole procedure when no endpoint exists', async () => {
+    const tmp = makeTmpDir('client-config-missing');
+    try {
+      const r = await createCli().test(['client-config', '--data-dir', tmp]);
+      assert.equal(r.exitCode, 1);
+      assert.equal(r.stdout, '', 'a failure must print nothing pasteable');
+      assert.match(r.stderr, /no live MCP endpoint/);
+      assert.ok(r.stderr.includes(tmp), 'the error must name the directory it searched');
+      assert.match(r.stderr, /install-host --browser chrome/);
+      assert.match(r.stderr, /spawned by the BROWSER/);
+      assert.match(r.stderr, /client-config/);
+    } finally {
+      removeTmpDir(tmp);
+    }
+  });
+
+  test('client-config treats a descriptor from a dead host as no endpoint', async () => {
+    const tmp = makeTmpDir('client-config-stale');
+    try {
+      // A pid that has certainly exited: the child is reaped before spawnSync
+      // returns. Recycling it within the test window would be a lottery win.
+      const deadPid = spawnSync(process.execPath, ['-e', '0']).pid;
+      assert.ok(Number.isInteger(deadPid), 'need a real pid to stale out');
+      writeEndpointFile(tmp, { url: 'http://127.0.0.1:45672/mcp', token: 'stale-token', pid: deadPid });
+
+      const r = await createCli().test(['client-config', '--data-dir', tmp]);
+      assert.equal(r.exitCode, 1);
+      assert.equal(r.stdout, '');
+      assert.match(r.stderr, /no live MCP endpoint/);
+      assert.match(r.stderr, /no longer running/);
+    } finally {
+      removeTmpDir(tmp);
+    }
+  });
+
+  test('the applied argv is exactly the claude mcp add HTTP form', () => {
+    // --apply runs this vector directly (no shell), so it is asserted verbatim
+    // rather than by matching the printed string.
+    assert.deepEqual(claudeAddArgv({ url: 'http://127.0.0.1:1/mcp', token: 'tok' }), [
+      'mcp',
+      'add',
+      '--transport',
+      'http',
+      'browserbuddy',
+      'http://127.0.0.1:1/mcp',
+      '--header',
+      'Authorization: Bearer tok'
+    ]);
   });
 
   test('--version reports the package version', async () => {

@@ -7,6 +7,7 @@ import { EventStore } from './store.js';
 import { DemoRecorder } from './demos.js';
 import { createMcpServer } from './mcp.js';
 import { installNativeHost, DEFAULT_HOST_DATA_DIR, BROWSER_CHOICES } from './install-host.js';
+import { clientConfigCommand } from './client-config.js';
 import { ENDPOINT_FILENAME } from './endpoint-file.js';
 
 const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -70,7 +71,7 @@ export function createCli() {
   const app = createApp({
     name: 'browserbuddy',
     version: VERSION,
-    help: 'Share one browser between you and your coding agent. install-host sets up the native-messaging host the extension spawns by default; serve runs the MCP stdio server with the WebSocket hub for builds that use the WebSocket carrier instead.'
+    help: 'Share one browser between you and your coding agent. install-host sets up the native-messaging host the extension spawns by default, client-config prints the MCP registration for the host once the browser has spawned it, and serve runs the MCP stdio server with the WebSocket hub for builds that use the WebSocket carrier instead.'
   });
 
   app.command(
@@ -160,10 +161,17 @@ export function createCli() {
           `[browserbuddy] endpoint file: ${path.join(result.dataDir, ENDPOINT_FILENAME)} ` +
             '(written once the browser spawns the host; point your MCP client at the url and token it contains)'
         );
+        console.error(
+          '[browserbuddy] next: load the extension so the browser spawns the host, then run ' +
+            `\`browserbuddy client-config${result.dataDir === DEFAULT_HOST_DATA_DIR ? '' : ` --data-dir ${result.dataDir}`}\` ` +
+            'to get the exact MCP registration.'
+        );
         return 0;
       }
     })
   );
+
+  app.command(clientConfigCommand({ defaultDataDir: DEFAULT_HOST_DATA_DIR }));
 
   return app;
 }

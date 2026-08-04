@@ -221,6 +221,23 @@ describe('MCP server integration', () => {
     assert.deepEqual(offenders, []);
   });
 
+  // ctx.info writes to stdout, so it is governed by the same rule from the
+  // other side: exactly one file may produce CLI output, and it is the one
+  // command whose whole purpose is to print a result (the endpoint
+  // registration). Everything else -- above all `serve`, which owns fd 1 for
+  // the MCP stdio protocol -- reports through stderr.
+  const CTX_INFO_OWNER = 'client-config.js';
+
+  test('only the client-config command writes to stdout via ctx.info', () => {
+    const offenders = [];
+    for (const file of srcFiles(path.join(SERVER_ROOT, 'src'))) {
+      if (path.basename(file) === CTX_INFO_OWNER) continue;
+      const text = fs.readFileSync(file, 'utf8');
+      if (text.includes('ctx.info(') || text.includes('ctx.debug(')) offenders.push(file);
+    }
+    assert.deepEqual(offenders, []);
+  });
+
   test('the host entry point redirects process.stdout to stderr before serving', () => {
     const text = fs.readFileSync(path.join(SERVER_ROOT, 'src', STDOUT_OWNER), 'utf8');
     assert.match(text, /process\.stdout\.write\s*=\s*\(/, 'process.stdout.write must be reassigned');
