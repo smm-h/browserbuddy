@@ -32,7 +32,8 @@ BrowserBuddy :-: var key="project.version" is a shared browser for you and your 
   - `demos.js` — demonstration recorder: captures user events while recording, cleans them into a replayable step list, persists one JSON file per demo.
 - `server/test/` — `node --test` suite, including a fake extension driver (`fake-extension.js`) for hub/MCP tests and a fake browser (`fake-native-extension.js`) that spawns the real host over real pipes.
 - `scripts/e2e-smoke.mjs` — live end-to-end smoke test of the WebSocket carrier against a real browser with the real extension.
-- `scripts/spike-nativemsg.mjs` — live end-to-end proof of the native-messaging carrier: installs the host manifest into a throwaway Chromium profile, lets the browser spawn the host, then drives the MCP tools over HTTP.
+- `scripts/spike-nativemsg.mjs` — live end-to-end proof of the native-messaging carrier on both browsers: installs the host manifest into a throwaway Chromium profile or a throwaway HOME, lets the browser spawn the host, then drives the MCP tools over HTTP. `--browser firefox` installs `extension/` as a temporary add-on over the remote debugging protocol.
+- `scripts/firefox-harness.mjs` — the shared Firefox half of both live harnesses: profile prefs (including the `originControls.grantByDefault` that stands in for the human permission grant), the launch, and the RDP client that installs a temporary add-on.
 - `scripts/install-native-host.mjs` — development CLI over `server/src/install-host.js`: writes the host manifest and launcher for a named Chromium user-data-dir or Firefox HOME. End users run `browserbuddy install-host --browser chrome|firefox` instead.
 - `docs/` — `PROTOCOL.md` (normative wire contract) and `ARCHITECTURE.md` (components, data flow, rationale), both hand-maintained; `_README.md` and `_CLAUDE.md` are the selfdoc templates for the root files.
 - `pypi/` — PyPI name-reservation placeholder package only. Not the product; do not grow it.
@@ -57,7 +58,10 @@ BrowserBuddy :-: var key="project.version" is a shared browser for you and your 
 - `npm test` — the unit/integration suite (`node --test server/test/*.test.js`). Must be green before any commit.
 - `node scripts/e2e-smoke.mjs` — live end-to-end run: spawns the real server, launches a real browser with `extension/` loaded, and exercises the MCP tools against live pages. `--browser firefox` runs the Firefox path (default is chromium); `--keep` and `--headed` help when debugging.
 - `node scripts/e2e-smoke.mjs --port <n>` — the default port 8590 may be held by a live BrowserBuddy session; pass another port rather than killing the session.
-- `node scripts/spike-nativemsg.mjs` — live end-to-end run of the native-messaging carrier on Chromium: the browser spawns the host, and the MCP tools are driven over the host's loopback HTTP endpoint. Needs no free port (the host picks an ephemeral one) and writes nothing outside `server/test/.tmp/`. `--idle-probe-sec N` measures whether the native port survives N seconds of an idle MV3 service worker.
+- `node scripts/spike-nativemsg.mjs` — live end-to-end run of the native-messaging carrier: the browser spawns the host, and the MCP tools are driven over the host's loopback HTTP endpoint. Needs no free port (the host picks its own) and writes nothing outside `server/test/.tmp/`. It also runs `browserbuddy client-config` against the live host, so the documented connect flow is proven, not assumed.
+- `node scripts/spike-nativemsg.mjs --browser firefox` — the same run on Firefox: the host manifest goes into a throwaway `HOME` (never `~/.mozilla`), and `extension/` is installed as a temporary add-on over the remote debugging protocol. Proven green on Firefox 148 headed under Xvfb.
+- `node scripts/spike-nativemsg.mjs --idle-probe-sec N` — sits idle for N seconds and then checks both that the tools still answer *and* that the endpoint still names the same host pid. The pid is the real measurement: the endpoint identity is built to make a respawn invisible, so a working tool call alone does not prove the background context survived.
+- `node scripts/spike-nativemsg.mjs --hard-error-probe` — Chromium only, and it refuses to run on Firefox rather than pretending: it reads the extension's own error out of the browser's stderr, which Firefox keeps in the Browser Console instead.
 
 ## Releases
 
