@@ -1,11 +1,11 @@
 {
   "ARCHITECTURE.md": {
-    "content": "83b7aff77609e8aaf39a93ba1adebe95eac135848f0fb98fa2534d2c45db6e38",
-    "description": "7043e4958968f4816e8da9affb4b15e47523bbdfd43fbb24197e7df6926ce6f9"
+    "content": "c06f180483622bb0156432c1a1b8a99c659684ce3d2d10d51835a816de703d4d",
+    "description": "dffd423038d80f7d05409d56909b41d8276239aa7e219745ffdd25a112a5e32a"
   },
   "PROTOCOL.md": {
-    "content": "8f388d5fb2c036fe19e00b668b24da3f316134029c36c2df2484ee05dd2f981f",
-    "description": "c2364163b990eb03f7250a14b0701999fd2d9f17387c696011d1623823bae4d2"
+    "content": "81572ae1b072ac6613512255727dd973747d5414fe29ca7f4154befaac3e44fa",
+    "description": "94d099e243aa467136be02bf914b754f28a3b944d8b3e0d91694f70a96e16334"
   },
   "_hash_version": 3,
   "cli-client-config.md": {
@@ -26,9 +26,9 @@
     "seed_hash": "fc02dc5bf984cf460de40fc1a199829249b0c2d44dc7acf5ea383c41b5e561d9"
   },
   "cli-serve.md": {
-    "content": "064282ec562c74c8f83ff58e073be2d5a3144feabfae7b7647354c1588a2b703",
-    "description": "a33a731768d3d98d16233725505b8b69c1a22df8984d4eb499ce3e6b0d5abd1d",
-    "schema_hash": "e5ab8b053cd3b32f5b3a0741a348f03b3eaeed26911588997f93bb4ba79fcd20"
+    "content": "f945f049bd411d08d7e5050a9b7210cc0105155c4cd440d0befd9a2654d37d73",
+    "description": "ba1d63d19977f37dac92ac2be7ce3340a08825991d912d4b1a33c3704e8cae8c",
+    "schema_hash": "d0b1e6d916cedc5fe84f157180226a66cd148c7f778f82bb45f4223fd7e87c90"
   },
   "extension-background.md": {
     "content": "f726f53888beeea2987af7b86706558d5d7e6e32a91f427de802743b2a72e754",
@@ -44,8 +44,8 @@
     "seed_hash": "d92c3d679495d5dd2ebf65df6f88a4b9f8e427996b69169ad8eba1b79c789e3a"
   },
   "gen-index.md": {
-    "content": "66bb6508fb6eb748657ae78b732c54a08c93619c1f6a018028913088cd38180f",
-    "description": "88e31fae9611fddff2daee5bb158d9577b910361cfd64f1970166fd8fbfe25e1"
+    "content": "023b01763f579cf2b4cbec0a6d61f172b20cd69c4c4eb90a1a2342efffc7d45a",
+    "description": "4bac4392d4496772bff6b833c931d78f7efb5c7489edac6df98acf28f4001d2c"
   },
   "index.md": {
     "content": "3afe22ae5ca219b524bd131844f7ca1e5c93424e4af6a5be9ab59c6943e7bde7",
