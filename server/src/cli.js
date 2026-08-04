@@ -9,13 +9,12 @@ import { createMcpServer } from './mcp.js';
 import { installNativeHost, DEFAULT_HOST_DATA_DIR, BROWSER_CHOICES } from './install-host.js';
 import { clientConfigCommand } from './client-config.js';
 import { ENDPOINT_FILENAME } from './endpoint-file.js';
+import { VERSION } from './version.js';
 
 const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Event logs and demonstrations live under server/data/ regardless of cwd. */
 export const DEFAULT_DATA_DIR = path.join(SERVER_DIR, 'data');
-
-export const VERSION = '0.1.0';
 
 /**
  * Starts the WebSocket hub and the MCP stdio server, then resolves. The process

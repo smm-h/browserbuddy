@@ -8,6 +8,9 @@ import { SERVER_ROOT } from './helpers.js';
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
 const TRANSPORT_SRC = path.join(REPO_ROOT, 'extension', 'transport-native.js');
 const BACKGROUND_SRC = path.join(REPO_ROOT, 'extension', 'background.js');
+const MANIFEST = JSON.parse(
+  fs.readFileSync(path.join(REPO_ROOT, 'extension', 'manifest.json'), 'utf8')
+);
 
 /**
  * extension/transport-native.js is a plain script with no imports, so it runs
@@ -47,6 +50,7 @@ function fakeBrowserApi(port, hooks = {}) {
   return {
     runtime: {
       connectNative: () => port,
+      getManifest: () => MANIFEST,
       lastError: null,
       onMessage: event('runtime.onMessage'),
       onStartup: noopEvent(),
@@ -239,8 +243,9 @@ describe('background rpc dispatch', () => {
   test('the extension announces itself once the pipe is up', () => {
     const hellos = port.sent.filter((m) => m.kind === 'hello').map((m) => JSON.parse(JSON.stringify(m)));
     assert.deepEqual(hellos, [
-      { kind: 'hello', role: 'extension', version: '0.1.0', transport: 'native-messaging' }
+      { kind: 'hello', role: 'extension', version: MANIFEST.version, transport: 'native-messaging' }
     ]);
+    assert.equal(typeof MANIFEST.version, 'string', 'the handshake version comes from the manifest');
   });
 
   test('an unimplemented method is a hard error naming the method', async () => {

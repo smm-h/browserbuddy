@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { FakeExtension } from './fake-extension.js';
 import { makeTmpDir, removeTmpDir, SERVER_ROOT } from './helpers.js';
+import { VERSION } from '../src/version.js';
 
 const PORT = 18700;
 
@@ -100,6 +101,12 @@ describe('MCP server integration', () => {
     if (ext) await ext.close();
     await client.close();
     removeTmpDir(dataDir);
+  });
+
+  // The version the MCP client sees must be the package's, not a literal that
+  // the release bump would leave behind (see server/src/version.js).
+  test('advertises the package version to the MCP client', async () => {
+    assert.deepEqual(client.getServerVersion(), { name: 'browserbuddy', version: VERSION });
   });
 
   test('exposes exactly the specified tools, each with a description', async () => {

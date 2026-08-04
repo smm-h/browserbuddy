@@ -2,6 +2,7 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { Hub, notConnectedMessage } from '../src/hub.js';
+import { VERSION } from '../src/version.js';
 import { FakeExtension } from './fake-extension.js';
 
 const BASE_PORT = 18500;
@@ -50,7 +51,7 @@ describe('Hub', () => {
     const ext = await connectExt({ hello: false });
     const ack = ext.waitFor((m) => m.kind === 'hello_ack');
     ext.send({ kind: 'hello', role: 'extension', version: '0.1.0' });
-    assert.deepEqual(await ack, { kind: 'hello_ack', serverVersion: '0.1.0' });
+    assert.deepEqual(await ack, { kind: 'hello_ack', serverVersion: VERSION });
     assert.equal(hub.isConnected(), true);
   });
 

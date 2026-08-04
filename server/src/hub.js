@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { WebSocketServer } from 'ws';
 import { PendingRpcs } from './rpc-peer.js';
+import { VERSION } from './version.js';
 
-export const SERVER_VERSION = '0.1.0';
 const DEFAULT_RPC_TIMEOUT_MS = 20000;
 
 export function notConnectedMessage(port) {
@@ -119,7 +119,7 @@ export class Hub extends EventEmitter {
           this.socket.close();
         }
         this.socket = ws;
-        ws.send(JSON.stringify({ kind: 'hello_ack', serverVersion: SERVER_VERSION }));
+        ws.send(JSON.stringify({ kind: 'hello_ack', serverVersion: VERSION }));
         console.error(`[browserbuddy] extension connected (version ${msg.version ?? 'unknown'})`);
         break;
 

@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ACTOR_VALUES } from './store.js';
+import { VERSION } from './version.js';
 
 const tabId = z.number().describe('Browser tab id; defaults to the active tab when omitted.');
 
@@ -170,7 +171,7 @@ const ACTING_TOOLS = [
 ];
 
 export function createMcpServer({ hub, store, demos }) {
-  const server = new McpServer({ name: 'browserbuddy', version: '0.1.0' });
+  const server = new McpServer({ name: 'browserbuddy', version: VERSION });
 
   for (const tool of ACTING_TOOLS) {
     server.registerTool(

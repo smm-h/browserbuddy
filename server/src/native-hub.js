@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { PendingRpcs } from './rpc-peer.js';
-import { SERVER_VERSION } from './hub.js';
+import { VERSION } from './version.js';
 
 const DEFAULT_RPC_TIMEOUT_MS = 20000;
 
@@ -71,7 +71,7 @@ export class NativeHub extends EventEmitter {
       case 'hello':
         this.helloed = true;
         this.extensionVersion = msg.version ?? null;
-        this.channel.send({ kind: 'hello_ack', serverVersion: SERVER_VERSION, transport: 'native-messaging' });
+        this.channel.send({ kind: 'hello_ack', serverVersion: VERSION, transport: 'native-messaging' });
         console.error(`[browserbuddy] extension handshake over native messaging (version ${msg.version ?? 'unknown'})`);
         this.emit('hello', msg);
         break;

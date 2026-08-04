@@ -37,7 +37,10 @@ const TRANSPORT = 'native';
 const ext = typeof browser !== 'undefined' ? browser : chrome;
 
 const WS_URL = 'ws://127.0.0.1:8590/ws';
-const VERSION = '0.1.0';
+// The manifest is the extension's own single source of version truth: there is
+// no build step that could stamp a literal here, so reading it back keeps the
+// handshake honest no matter what manifest.json says.
+const VERSION = ext.runtime.getManifest().version;
 const BACKOFF_MS = [1000, 2000, 5000, 10000];
 const PING_INTERVAL_MS = 20000;
 const MAX_BUFFER = 500;
