@@ -5,7 +5,7 @@ description: "BrowserBuddy CLAUDE.md template -- component map, hard invariants,
 
 # BrowserBuddy
 
-BrowserBuddy :-: var key="project.version" is a shared browser for you and your coding agent: one Node.js process (`browserbuddy serve`) that is simultaneously an MCP stdio server and a WebSocket hub on `127.0.0.1:8590`, plus a cross-browser MV3 WebExtension (Chrome and Firefox, one codebase) that connects to that hub. The agent acts through 25 MCP tools and observes the user's own clicks, typing, navigation and downloads as a queryable event log — the same window, the same session, no debug port and no automation flags. Node 22+, no build step, no transpiler.
+BrowserBuddy :-: var key="project.version" is a shared browser for you and your coding agent: a cross-browser MV3 WebExtension (Chrome and Firefox, one codebase) paired with a Node.js server that serves 25 MCP tools. By default **the browser starts the server**: the extension calls `connectNative`, the browser spawns `native-host-bin.js`, and that host serves Streamable-HTTP MCP on a stable loopback port behind a bearer token it publishes in `mcp-endpoint.json` — set up with `browserbuddy install-host`, attached with `browserbuddy client-config`. The older carrier (`browserbuddy serve`: MCP stdio server plus a WebSocket hub on `127.0.0.1:8590`, dialled by the extension) still works and is selected by the `TRANSPORT` constant in `background.js`. The agent acts through the tools and observes the user's own clicks, typing, navigation and downloads as a queryable event log — the same window, the same session, no debug port and no automation flags. Node 22+, no build step, no transpiler.
 
 ## Component map
 
@@ -16,7 +16,8 @@ BrowserBuddy :-: var key="project.version" is a shared browser for you and your 
   - `content.js` — injected into pages: DOM observation, selector construction, redaction, and the page-level half of the RPC surface.
 - `server/src/` — the Node process.
   - `index.js` — `browserbuddy` bin entry point; runs the CLI and reports fatal errors on stderr.
-  - `cli.js` — strictcli app (`serve` with `--port`, `--data-dir`; `install-host` with `--browser`, `--user-data-dir`/`--home`, `--data-dir`), plus `startServer` which wires hub, store, demos and the MCP server together.
+  - `cli.js` — strictcli app (`serve` with `--port`, `--data-dir`; `install-host` with `--browser`, `--user-data-dir`/`--home`, `--data-dir`; `client-config`), plus `startServer` which wires hub, store, demos and the MCP server together.
+  - `client-config.js` — the `client-config` command: reads the live endpoint descriptor and renders the MCP client registration (`claude mcp add --transport http …` plus an `mcpServers` block), or hard-errors with the whole setup order. `--apply` runs the registration; printing is the default. The CLI's only stdout writer.
   - `hub.js` — WebSocket server: one extension connection at a time, RPC request/response correlation with timeouts, event fan-out.
   - `rpc-peer.js` — `PendingRpcs`, the one in-flight RPC table both transports use.
   - `native-host-bin.js` — the executable the browser spawns via `connectNative`. Deliberately not a strictcli app: the browser appends its own arguments. Hands fd 1 to the framing channel and points the process stdout stream at stderr.
@@ -43,7 +44,7 @@ BrowserBuddy :-: var key="project.version" is a shared browser for you and your 
 ::: These are non-negotiable. Breaking any of them is a defect, not a trade-off, and several are enforced by tests that will fail loudly.
 :>:
 
-- **stdout belongs to the MCP stdio protocol.** No file under `server/src/` may write to stdout — every diagnostic goes to stderr, and strictcli handlers must never use `ctx.info`. A tripwire test in `server/test/mcp.test.js` scans the source for stdout writes and fails if one appears.
+- **stdout belongs to a protocol, and it has exactly one owner on each side.** Under `serve` fd 1 is the MCP stdio channel; under the native host it is the framing stream. So *diagnostics* always go to stderr, no file but `native-host-bin.js` may name the process stdout stream, and `client-config.js` — the one command whose output is a result rather than a diagnostic — is the only file allowed to use `ctx.info`. Three tripwire tests in `server/test/mcp.test.js` scan the source and fail if any of the three lines is crossed.
 - **Hard errors, never silent fallbacks.** A missing extension connection, an occupied port, a CSP-blocked `browser_eval`, a Firefox screenshot without a gesture — all fail loudly with an actionable message. Never retry-with-a-different-strategy, never degrade silently, never pretend an action succeeded.
 - **Redaction is a guarantee, not a filter.** Sensitive values (password inputs, `cc-*` autocomplete, and names/ids/labels matching the sensitive-field pattern) are replaced with `[REDACTED]` inside the page, before anything is sent. They must never reach the hub, the JSONL logs, the demo files, or the agent — including through click text, copy previews and paste previews.
 - **Actor attribution is sacred.** Every event carries an `actor` of `user` or `agent`. Agent-driven actions must never be recorded as user events: it would corrupt `browser_wait_for_user` (the agent would wake itself), poison demonstrations, and lie to `browser_observe`.
