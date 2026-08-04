@@ -2,7 +2,7 @@
 
 # BrowserBuddy
 
-> **browserbuddy** 0.2.0 — an MCP stdio server plus a cross-browser WebExtension. Requires Node.js 22 or newer.
+> **browserbuddy** 0.2.1 — an MCP stdio server plus a cross-browser WebExtension. Requires Node.js 22 or newer.
 
 ## What it is
 
@@ -197,7 +197,7 @@ Copy and paste events from ordinary page content keep only a preview of at most 
 
 ## Limitations
 
-Accepted trade-offs in version 0.2.0:
+Accepted trade-offs in version 0.2.1:
 
 - **Synthetic clicks are `isTrusted: false`.** Extension-generated events are distinguishable from human ones. Most sites do not care; a few hardened ones (some payment and anti-fraud flows) ignore them. Those steps need you — which is what lockstep is for.
 - **`browser_eval` is subject to page CSP.** A strict Content-Security-Policy can block main-world evaluation. This is reported as a hard error, not silently worked around.

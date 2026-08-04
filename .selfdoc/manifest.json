@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "browserbuddy",
   "slug": "browserbuddy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A shared browser for you and your coding agent: an MCP server plus a WebExtension that let an agent see and drive the same browser window you are already using.",
   "language": "typescript",
   "base_url": "https://github.com/smm-h/browserbuddy",
@@ -149,5 +149,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-04T09:04:58.333759+00:00"
+  "last_gen": "2026-08-04T09:20:15.726476+00:00"
 }
