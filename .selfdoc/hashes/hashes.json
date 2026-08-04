@@ -8,10 +8,22 @@
     "description": "c2364163b990eb03f7250a14b0701999fd2d9f17387c696011d1623823bae4d2"
   },
   "_hash_version": 3,
+  "cli-client-config.md": {
+    "content": "d9dffda75d8daff63007b4458013878dbfcca6655d8d93107d188ce5462cb70c",
+    "description": "06a9f36881071571beae5c0006545ce2db73d9e45ba5388f5e99a75aad56fb27",
+    "schema_hash": "3d8fd7e2fb49c2e3073965f2cee286b0c5b1ecfd94ba354b5b41d3ec6f0fe99c",
+    "seed_hash": "06a9f36881071571beae5c0006545ce2db73d9e45ba5388f5e99a75aad56fb27"
+  },
   "cli-index.md": {
-    "content": "f54dc9ee9edc33a8e996e68088703200d84f001339120f5589baaee24364f3ce",
+    "content": "a9ef4092413e2b9f4533c98031e4b00c367fa34e050d2561cc9cba57ded4a0a4",
     "description": "b23f0e4366369ed2f4db6dbd00bb8196ed1d5b7f0727e8d3b2302da2a577be86",
     "seed_hash": "b23f0e4366369ed2f4db6dbd00bb8196ed1d5b7f0727e8d3b2302da2a577be86"
+  },
+  "cli-install-host.md": {
+    "content": "ba48b6dd80411bb93d19a6dfd598ec12def24e3701acbadd7592a5f4a57b00b5",
+    "description": "fc02dc5bf984cf460de40fc1a199829249b0c2d44dc7acf5ea383c41b5e561d9",
+    "schema_hash": "df3152d7ab9542a1fe3a713c72cb66c3398e8fe65cbb838d7e35f5aa3e4ba3d9",
+    "seed_hash": "fc02dc5bf984cf460de40fc1a199829249b0c2d44dc7acf5ea383c41b5e561d9"
   },
   "cli-serve.md": {
     "content": "064282ec562c74c8f83ff58e073be2d5a3144feabfae7b7647354c1588a2b703",
@@ -43,6 +55,11 @@
     "content": "8e7942a0e5741942d57be929538bd841c6fa6ec873fa4ce0f1fc463c4ffcfd6a",
     "description": "0d6fe878e587a94bdce2ef4fa1e95c7e6e6b9524f5e861b250e72ff6227f98d8"
   },
+  "server-src-client-config.md": {
+    "content": "d9588e3308185ada9e99a5b7f60655806a6195e868a957fd86b535c8738e3875",
+    "description": "45869ce9f890d377495b5d0cfc3811b310517bc7be8c4ce1846ee9ee8d9dafcb",
+    "seed_hash": "45869ce9f890d377495b5d0cfc3811b310517bc7be8c4ce1846ee9ee8d9dafcb"
+  },
   "server-src-demos.md": {
     "content": "5a9c4d9fee9acab464f72af6947feacb213dd1958a634fddf4762c568cdfa1ba",
     "description": "b7cfa1812e1bf181e555c452626e50901b36a04f7ee8c78dfe527b4d6c5def38"
@@ -69,6 +86,11 @@
   "server-src-index.md": {
     "content": "9e2c003235b5153633d2f1e5eb43bec00cd91875e25f7941c7313ac667d560a3",
     "description": "1fa2c84acdecca244c4d3096eb9924f1da19c06aade2630abc8c82d69612e0f4"
+  },
+  "server-src-install-host.md": {
+    "content": "c33caf83c4fe6918d39deeebc409e82a538195358955399725dd84d2754d98af",
+    "description": "5b660553c1121481313bd6be2643f51e53b0a874eac4dd47a0d95cf78f4ef305",
+    "seed_hash": "5b660553c1121481313bd6be2643f51e53b0a874eac4dd47a0d95cf78f4ef305"
   },
   "server-src-mcp.md": {
     "content": "8d54f360346a4d0232a35a253ab52c0a21ed3e35a7f1b0d959d6dfc18b43816d",
@@ -102,5 +124,10 @@
   "server-src-store.md": {
     "content": "4b5495a47cf51283c84ff53948e8a6c574666532b98ddd27dc91e34ced93c72d",
     "description": "4aad6e2a53204e6d5f4c3bac4499acfb0fd6ddc0715f5a383d3708d3653e814b"
+  },
+  "server-src-version.md": {
+    "content": "d5abebb773912e1990383ff2f0902068ba1997876e57650910774e7d4ade349a",
+    "description": "cd24daf14ba6d8bc169196bf9d28d3721676b8823ff49a03c04b46c3207cb87b",
+    "seed_hash": "cd24daf14ba6d8bc169196bf9d28d3721676b8823ff49a03c04b46c3207cb87b"
   }
 }
