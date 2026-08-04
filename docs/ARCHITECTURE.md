@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: "How BrowserBuddy is put together: content script, background script and Node hub, how events flow between them, and why it trades control for presence."
+description: "How BrowserBuddy is put together: content script, background script and the browser-spawned native host, how events flow between them, and why it trades control for presence."
 ---
 
 # BrowserBuddy architecture

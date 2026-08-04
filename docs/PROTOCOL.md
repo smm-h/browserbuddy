@@ -1,6 +1,6 @@
 ---
 title: Protocol
-description: "The normative WebSocket contract between the extension and the local hub: framing, handshake, keepalive, the event stream, and the full RPC surface."
+description: "The normative contract between the extension and the local host, over either carrier: framing, handshake, keepalive, the event stream, and the full RPC surface."
 ---
 
 # BrowserBuddy wire protocol
