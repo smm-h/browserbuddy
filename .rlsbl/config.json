@@ -20,5 +20,13 @@
       "target": "pypi"
     }
   },
-  "changelog_format_version_enforced": true
+  "changelog_format_version_enforced": true,
+  "external_checks": [
+    {
+      "name": "manifest-version-lockstep",
+      "kind": "freeform",
+      "command": "node scripts/check-manifest-version.mjs",
+      "tag": "preflight"
+    }
+  ]
 }
