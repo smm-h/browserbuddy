@@ -1,0 +1,30 @@
+# gitleaks configuration.
+#
+# The release pipeline scans the source tree and the built artifacts, and a
+# single finding aborts the release. That is the right default, so this file
+# records only the one value in the tree that looks like a credential and is
+# not.
+#
+# The allowlist is pinned to that exact value, and nothing else: not to the
+# file, and not to a pattern. A path-scoped allowlist would have been the
+# obvious shape, but gitleaks 8.24.3 (the version the publish workflow pins)
+# accepts `condition = "AND"` and then ignores it, so `paths` + `regexes` is
+# evaluated as OR -- the path alone would skip the whole file and hide any
+# future secret added to the manifest. Matching the literal value keeps the
+# exemption exactly as wide as the thing being exempted.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+extension/manifest.json's "key" is an RSA *public* key -- a base64 DER
+SubjectPublicKeyInfo -- and not a credential. Chrome derives an unpacked
+extension's id from it (see chromeExtensionIdFromKey in
+server/src/host-manifest.js), and that id has to be stable across machines and
+checkouts because the native-messaging host manifest names it in
+allowed_origins. So the key is necessarily committed, and it is public by
+construction: the browser hands the id it produces to anything that asks. The
+private half was never generated here and does not exist in this repo.
+"""
+regexes = ['''MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxjRFZlCN9KL\+kw\+fYdVwAy\+w1dTUvrQ0FLVu4YI3gsAzcfqLqPAVgeNyw76rPhJeOGeQz3oVVOWdi6/UaLBg9gxAH0MvaP89kZLvQU1WulnlaMC\+bgwgVNet\+5RwDhFHdyzAbmhz1i5pYVsR3m4DYviYtllGoRtyDooYhKmBL8d62LWTLt/XZkQ5efG/UFvRBAU7sa39y9MxNYYNmP2\+do2YyWdZZiovBKrU6xOYQVyp9ynOHY16hezWGmjNF9iiVMaXrgFbPKteH9exlD8cxQyAQUXw6fCpyclCgobDJDEo\+\+JiNZQ288kNlx3mo9KCmltrjYNY/v\+X4TbP6t6JKwIDAQAB''']
